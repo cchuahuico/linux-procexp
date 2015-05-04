@@ -1,8 +1,8 @@
-from PySide import QtGui
+from PyQt4 import QtGui
 
-class MainWindow(QtGui.QMainWindow):
+class ProcExpWindow(QtGui.QMainWindow):
     def __init__(self):
-        super(MainWindow, self).__init__()
+        super().__init__()
         self.initUI()
 
     def initMenuBar(self):
@@ -17,6 +17,6 @@ class MainWindow(QtGui.QMainWindow):
 
     def initUI(self):
         self.initMenuBar()
-        self.setGeometry(300, 300, 750, 550)
+        self.setGeometry(300, 300, 950, 650)
         self.setWindowTitle('Linux Process Explorer')
 

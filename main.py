@@ -1,11 +1,10 @@
 import sys
-from PySide import QtGui
-
-from ui.mainwindow import MainWindow
+from PyQt4 import QtGui
+from linux_procexp.ui.procexpwindow import ProcExpWindow
 
 def main():
     app = QtGui.QApplication(sys.argv)
-    mw = MainWindow()
+    mw = ProcExpWindow()
     mw.show()
     sys.exit(app.exec_())
 
