@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import re
 import os
 import os.path
@@ -52,11 +54,12 @@ class ProcTableModel(QAbstractItemModel):
             if pid not in procTable:
                 node = ProcessNode(pid)
                 procTable[pid] = node
-                if node.parent.pid in procTable:
-                    procTable[node.parent.pid].insertChild(node)
-                else:
-                    procTable[node.parent.pid] = ProcessNode(node.parent.pid)
-                node.parent = procTable[node.parent.pid]
+                ppid = node.data.parent_pid
+                if ppid != 0:
+                    if ppid not in procTable:
+                        procTable[ppid] = ProcessNode(ppid)
+                    procTable[ppid].insertChild(node)
+                    node.parent = procTable[ppid]
 
     def index(self, row, col, parentMIdx):
         node = self.nodeFromIndex(parentMIdx)
@@ -80,14 +83,12 @@ class ProcTableModel(QAbstractItemModel):
         if role == Qt.DisplayRole:
             node = self.nodeFromIndex(mIdx)
             return node.fields[mIdx.column()]
-        return QVariant()
+        return None
 
     def headerData(self, section, orientation, role=Qt.DisplayRole):
-        return self.headers[section]
-
-    def flags(self, mIdx):
-        # TODO: according to doc this should be overriden but might not be needed
-        super().flags(mIdx)
+        if orientation == Qt.Horizontal and role == Qt.DisplayRole:
+            return self.headers[section]
+        return None
 
     def nodeFromIndex(self, index):
         return index.internalPointer() if index.isValid() else self.root
