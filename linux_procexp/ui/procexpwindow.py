@@ -1,12 +1,12 @@
-from PyQt4 import QtGui
+from PyQt4.QtGui import QAction, QMainWindow
 
-class ProcExpWindow(QtGui.QMainWindow):
+class ProcExpWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.initUI()
 
     def initMenuBar(self):
-        exitItem = QtGui.QAction('Exit', self)
+        exitItem = QAction('Exit', self)
         exitItem.setShortcut('Ctrl+Q')
         exitItem.setStatusTip('Exit application')
         exitItem.triggered.connect(self.close)

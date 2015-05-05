@@ -1,9 +1,9 @@
 import sys
-from PyQt4 import QtGui
+from PyQt4.QtGui import QApplication
 from linux_procexp.ui.procexpwindow import ProcExpWindow
 
 def main():
-    app = QtGui.QApplication(sys.argv)
+    app = QApplication(sys.argv)
     mw = ProcExpWindow()
     mw.show()
     sys.exit(app.exec_())
