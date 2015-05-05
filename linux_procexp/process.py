@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import os
 import os.path
 import re
@@ -43,8 +41,7 @@ class Process(object):
             if parent else os.path.join(self.PROC_PATH, self._pid)
 
         if not os.path.exists(self.pid_dir):
-            raise ValueError('Process id: {} does not exist in {}'.format(
-                self._pid, self.PROC_PATH))
+            raise ValueError('{} does not exist'.format(self.pid_dir))
 
         self._parent = parent
 
@@ -69,7 +66,17 @@ class Process(object):
     def name(self):
         # TODO: decide what to do with kernel support. for example, this is only
         # valid for kernel >= 2.2
-        return os.readlink(os.path.join(self.pid_dir, self.EXE_FILE_NAME))
+        try:
+            proc_name = os.readlink(os.path.join(self.pid_dir, self.EXE_FILE_NAME))
+        except PermissionError:
+            # most of the time exe has more stringent permissions so
+            # read and parse cmdline instead
+            proc_name = self.cmdline.split(' ')[0]
+
+        if not proc_name:
+            # name from stat has the form: '(name)'
+            return self.get_stat_info(1)[1:-1]
+        return os.path.basename(proc_name)
 
     @property
     def mem_usage(self):
@@ -84,10 +91,10 @@ class Process(object):
         return self.get_stat_info(18)
 
     @property
-    def parent(self):
+    def parent_pid(self):
         if not self._parent:
             self._parent = self.get_stat_info(3)
-        return self._parent
+        return int(self._parent)
 
     @property
     # TODO: look more into real vs effective UID
@@ -97,7 +104,7 @@ class Process(object):
                 if count == 7:
                     ruid = re.split('\s+', line_info)[1]
 
-        return ProcessOwner(ruid, pwd.getpwduid(ruid).pw_name)
+        return ProcessOwner(ruid, pwd.getpwuid(int(ruid)).pw_name)
 
     @property
     def cpu_usage(self):
@@ -111,11 +118,7 @@ class Process(object):
     def mem_map(self):
         # TODO: look into adding the libraries to the descriptors list
         with open(self.get_full_path(self.MEM_MAP_FILE_NAME)) as f:
-            regions = []
-            for entry in f:
-                vm_range, permissions, offset, dev, inode, file_path = re.split('\s+', entry)
-                regions.append(MappedRegion(vm_range, permissions, offset, dev, inode, file_path))
-        return regions
+            return [MappedRegion(re.split('\s+', entry)) for entry in f]
 
     @property
     def cwd(self):
@@ -137,7 +140,8 @@ class Process(object):
     def cmdline(self):
         if not self._cmdline:
             with open(self.get_full_path(self.CMDLINE_FILE_NAME)) as f:
-                # read and remove the null character '\x00' at the end
-                self._cmdline = f.read()[:-1]
+                # cmdline args are separated by null characters and terminated
+                # by a null character
+                self._cmdline = f.read().replace('\x00', ' ')[:-1]
 
         return self._cmdline
