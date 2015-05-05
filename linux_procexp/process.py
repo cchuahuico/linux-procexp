@@ -4,12 +4,6 @@ import re
 import pwd
 from collections import namedtuple
 
-ProcessOwner = namedtuple('ProcessOwner', ['uid', 'name'])
-FileDescriptor = namedtuple('FileDescriptor', ['id', 'type', 'name'])
-MappedRegion = namedtuple(
-    'MappedRegions', ['start', 'end', 'permissions', 'offset', 'dev', 'inode', 'file_path'])
-
-# TODO: look into the enum backports (might be overkill)
 class ProcessStates:
     ZOMBIE = 'Z'
     RUNNING = 'R'
@@ -18,17 +12,23 @@ class ProcessStates:
     STOPPED = 'T'
     DEAD = 'X'
 
+class ProcInfoFileName:
+    THREADS = 'task'
+    FD = 'fd'
+    EXE = 'exe'
+    CMDLINE = 'cmdline'
+    CWD = 'cwd'
+    MEM_MAP = 'maps'
+    STAT = 'stat'
+    STATUS = 'status'
+
 class Process(object):
-    # TODO: find a better place for these constants
     PROC_PATH = '/proc'
-    THREADS_DIR_NAME = 'task'
-    FD_DIR_NAME = 'fd'
-    EXE_FILE_NAME = 'exe'
-    CMDLINE_FILE_NAME = 'cmdline'
-    CWD_FILE_NAME = 'cwd'
-    MEM_MAP_FILE_NAME = 'maps'
-    STAT_FILE_NAME = 'stat'
-    STATUS_FILE_NAME = 'status'
+
+    ProcessOwner = namedtuple('ProcessOwner', ['uid', 'name'])
+    FileDescriptor = namedtuple('FileDescriptor', ['id', 'type', 'name'])
+    MappedRegion = namedtuple('MappedRegions', ['start', 'end', 'permissions',
+                                                'offset', 'dev', 'inode', 'file_path'])
 
     def __init__(self, pid, parent=None):
         # initializer takes pid as an int since it's more intuitive for the class
@@ -37,7 +37,7 @@ class Process(object):
 
         # if the Process object is initialized with a parent, it is treated as a thread
         # and will have a different directory  representing its runtime objects
-        self.pid_dir = os.path.join(self.PROC_PATH, str(parent.pid), self.THREADS_DIR_NAME, self._pid) \
+        self.pid_dir = os.path.join(self.PROC_PATH, str(parent.pid), ProcInfoFileName.THREADS, self._pid) \
             if parent else os.path.join(self.PROC_PATH, self._pid)
 
         if not os.path.exists(self.pid_dir):
@@ -55,7 +55,7 @@ class Process(object):
 
     # TODO: look into the linecache module for optimization
     def get_stat_info(self, prop_idx):
-        with open(self.get_full_path(self.STAT_FILE_NAME)) as f:
+        with open(self.get_full_path(ProcInfoFileName.STAT)) as f:
             return f.read().split(' ')[prop_idx]
 
     @property
@@ -67,7 +67,7 @@ class Process(object):
         # TODO: decide what to do with kernel support. for example, this is only
         # valid for kernel >= 2.2
         try:
-            proc_name = os.readlink(os.path.join(self.pid_dir, self.EXE_FILE_NAME))
+            proc_name = os.readlink(os.path.join(self.pid_dir, ProcInfoFileName.EXE))
         except PermissionError:
             # most of the time exe has more stringent permissions so
             # read and parse cmdline instead
@@ -99,12 +99,12 @@ class Process(object):
     @property
     # TODO: look more into real vs effective UID
     def owner(self):
-        with open(self.get_full_path(self.STATUS_FILE_NAME)) as f:
+        with open(self.get_full_path(ProcInfoFileName.STATUS)) as f:
             for count, line_info in enumerate(f):
                 if count == 7:
                     ruid = re.split('\s+', line_info)[1]
-
-        return ProcessOwner(ruid, pwd.getpwuid(int(ruid)).pw_name)
+                    break
+        return Process.ProcessOwner(ruid, pwd.getpwuid(int(ruid)).pw_name)
 
     @property
     def cpu_usage(self):
@@ -117,29 +117,29 @@ class Process(object):
     @property
     def mem_map(self):
         # TODO: look into adding the libraries to the descriptors list
-        with open(self.get_full_path(self.MEM_MAP_FILE_NAME)) as f:
-            return [MappedRegion(re.split('\s+', entry)) for entry in f]
+        with open(self.get_full_path(ProcInfoFileName.MEM_MAP)) as f:
+            return [Process.MappedRegion(re.split('\s+', entry)) for entry in f]
 
     @property
     def cwd(self):
-        return os.readlink(self.get_full_path(self.CWD_FILE_NAME))
+        return os.readlink(self.get_full_path(ProcInfoFileName.CWD))
 
     @property
     def descriptors(self):
-        fd_path = self.get_full_path(self.FD_DIR_NAME)
+        fd_path = self.get_full_path(ProcInfoFileName.FD)
         # TODO: use python-magic to implement the type field for descriptors
-        return [FileDescriptor(fid, 'UNIMPLEMENTED', os.readlink(os.path.join(fd_path, fid)))
+        return [Process.FileDescriptor(fid, 'UNIMPLEMENTED', os.readlink(os.path.join(fd_path, fid)))
             for fid in os.listdir(fd_path)]
 
     @property
     def threads(self):
         return [Process(tid, self) for tid in os.listdir(os.path.join(
-            self.pid_dir, self.THREADS_DIR_NAME))]
+            self.pid_dir, ProcInfoFileName.THREADS))]
 
     @property
     def cmdline(self):
         if not self._cmdline:
-            with open(self.get_full_path(self.CMDLINE_FILE_NAME)) as f:
+            with open(self.get_full_path(ProcInfoFileName.CMDLINE)) as f:
                 # cmdline args are separated by null characters and terminated
                 # by a null character
                 self._cmdline = f.read().replace('\x00', ' ')[:-1]
