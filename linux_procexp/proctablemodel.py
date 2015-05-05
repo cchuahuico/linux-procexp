@@ -1,7 +1,7 @@
 import re
 import os
 import os.path
-from PyQt4.QtCore import QAbstractItemModel, Qt, QModelIndex
+from PyQt4.QtCore import QAbstractItemModel, Qt, QModelIndex, QVariant
 from .process import Process
 
 class ProcessNode(object):
@@ -9,6 +9,7 @@ class ProcessNode(object):
         self.data = Process(pid)
         self.children = []
         self.parent = parent
+        self.fields = [self.data.name, self.data.pid, self.data.owner.name]
 
     def __len__(self):
         return len(self.children)
@@ -16,6 +17,17 @@ class ProcessNode(object):
     def insertChild(self, child):
         self.children.append(child)
 
+    def rowOfChild(self, childNode):
+        for i, child in enumerate(self.children):
+            if child == childNode:
+                return i
+        return -1
+
+    def childAtRow(self, row):
+        return self.children[row]
+
+    def fields(self, colIdx):
+        return self.fields[colIdx]
 
 class ProcTableModel(QAbstractItemModel):
     def __init__(self, parent=None):
@@ -23,9 +35,9 @@ class ProcTableModel(QAbstractItemModel):
 
         # headers or columns available in the treeview
         self.headers = ['Name', 'PID', 'Owner']
-        self._initializeProcTree()
+        self.initializeProcTree()
 
-    def _initializeProcTree(self):
+    def initializeProcTree(self):
         pids = []
         for path in os.listdir('/proc'):
             base = os.path.basename(path)
@@ -47,20 +59,28 @@ class ProcTableModel(QAbstractItemModel):
                 node.parent = procTable[node.parent.pid]
 
     def index(self, row, col, parentMIdx):
-        pass
+        node = self.nodeFromIndex(parentMIdx)
+        return self.createIndex(row, col, node.childAtRow(row))
 
     def parent(self, childMIdx):
-
+        node = self.nodeFromIndex(childMIdx)
+        row = node.rowOfChild(node)
+        parent = node.parent
+        if not parent:
+            return QModelIndex()
         return self.createIndex(row, 0, parent)
 
     def rowCount(self, parentMIdx):
-        pass
+        return len(self.nodeFromIndex(parentMIdx))
 
     def columnCount(self, parentMIdx):
-        pass
+        return len(self.headers)
 
     def data(self, mIdx, role=Qt.DisplayRole):
-        pass
+        if role == Qt.DisplayRole:
+            node = self.nodeFromIndex(mIdx)
+            return node.fields[mIdx.column()]
+        return QVariant()
 
     def headerData(self, section, orientation, role=Qt.DisplayRole):
         return self.headers[section]
@@ -68,3 +88,6 @@ class ProcTableModel(QAbstractItemModel):
     def flags(self, mIdx):
         # TODO: according to doc this should be overriden but might not be needed
         super().flags(mIdx)
+
+    def nodeFromIndex(self, index):
+        return index.internalPointer() if index.isValid() else self.root
