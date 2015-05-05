@@ -17,6 +17,7 @@ class ProcessNode(object):
         return len(self.children)
 
     def insertChild(self, child):
+        assert child not in self.children
         self.children.append(child)
 
     def rowOfChild(self, childNode):
@@ -51,26 +52,28 @@ class ProcTableModel(QAbstractItemModel):
         procTable = {1: self.root}
 
         for pid in pids:
-            if pid not in procTable:
+            if pid in procTable:
+                node = procTable[pid]
+            else:
                 node = ProcessNode(pid)
                 procTable[pid] = node
-                ppid = node.data.parent_pid
-                if ppid != 0:
-                    if ppid not in procTable:
-                        procTable[ppid] = ProcessNode(ppid)
-                    procTable[ppid].insertChild(node)
-                    node.parent = procTable[ppid]
+            ppid = node.data.parent_pid
+            if ppid != 0:
+                if ppid not in procTable:
+                    procTable[ppid] = ProcessNode(ppid)
+                procTable[ppid].insertChild(node)
+                node.parent = procTable[ppid]
 
     def index(self, row, col, parentMIdx):
         node = self.nodeFromIndex(parentMIdx)
         return self.createIndex(row, col, node.childAtRow(row))
 
     def parent(self, childMIdx):
-        node = self.nodeFromIndex(childMIdx)
-        row = node.rowOfChild(node)
-        parent = node.parent
+        childNode = self.nodeFromIndex(childMIdx)
+        parent = childNode.parent
         if not parent:
             return QModelIndex()
+        row = parent.rowOfChild(childNode)
         return self.createIndex(row, 0, parent)
 
     def rowCount(self, parentMIdx):
