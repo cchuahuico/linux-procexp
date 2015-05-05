@@ -8,10 +8,19 @@ from .process import Process
 
 class ProcessNode(object):
     def __init__(self, pid, parent=None):
-        self.data = Process(pid)
+        if pid == 0:
+            # The node with pid = 0 is a dummy node used as the root node
+            # and the parent of both init (pid = 1) and kthreadd (pid = 2)
+            # This is needed because in Linux (at least) the kernel thread
+            # daemon does not have init as its ppid
+            self.data = None
+            self.fields = []
+        else:
+            self.data = Process(pid)
+            self.fields = [self.data.name, self.data.pid, self.data.owner.name]
+
         self.children = []
         self.parent = parent
-        self.fields = [self.data.name, self.data.pid, self.data.owner.name]
 
     def __len__(self):
         return len(self.children)
@@ -44,12 +53,12 @@ class ProcTableModel(QAbstractItemModel):
         pids = []
         for path in os.listdir('/proc'):
             base = os.path.basename(path)
-            if re.match('\d+', base) and base != '1':
+            if re.match('\d+', base):
                 pids.append(int(base))
 
         # the root is always the process whose pid is 1
-        self.root = ProcessNode(1)
-        procTable = {1: self.root}
+        self.root = ProcessNode(0)
+        procTable = {0: self.root}
 
         for pid in pids:
             if pid in procTable:
@@ -58,11 +67,10 @@ class ProcTableModel(QAbstractItemModel):
                 node = ProcessNode(pid)
                 procTable[pid] = node
             ppid = node.data.parent_pid
-            if ppid != 0:
-                if ppid not in procTable:
-                    procTable[ppid] = ProcessNode(ppid)
-                procTable[ppid].insertChild(node)
-                node.parent = procTable[ppid]
+            if ppid not in procTable:
+                procTable[ppid] = ProcessNode(ppid)
+            procTable[ppid].insertChild(node)
+            node.parent = procTable[ppid]
 
     def index(self, row, col, parentMIdx):
         node = self.nodeFromIndex(parentMIdx)
