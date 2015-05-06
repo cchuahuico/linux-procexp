@@ -149,3 +149,8 @@ class Process(object):
                 # by a null character
                 self._cmdline = f.read().split('\0')[:-1]
         return self._cmdline
+
+class ProcUtil(object):
+    @staticmethod
+    def pids():
+        return [entry for entry in os.listdir('/proc') if re.match('\d+', entry)]
