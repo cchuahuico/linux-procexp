@@ -3,8 +3,9 @@ import os.path
 import re
 import pwd
 from collections import namedtuple
+from enum import Enum
 
-class ProcessStates:
+class ProcessStates(Enum):
     ZOMBIE = 'Z'
     RUNNING = 'R'
     SLEEPING = 'S'
@@ -58,11 +59,9 @@ class Process(object):
         with open(self.get_full_path(ProcInfoFileName.STAT)) as f:
             return f.read().split(' ')[prop_idx]
 
-    @property
     def pid(self):
         return int(self._pid)
 
-    @property
     def name(self):
         # TODO: decide what to do with kernel support. for example, this is only
         # valid for kernel >= 2.2
@@ -70,49 +69,43 @@ class Process(object):
             proc_name = os.readlink(os.path.join(self.pid_dir, ProcInfoFileName.EXE))
         except PermissionError:
             # most of the time exe has more stringent permissions so
-            # read and parse cmdline instead
-            proc_name = self.cmdline.split(' ')[0]
+            # grab the name from the cmdline instead
+            proc_name = self.cmdline()[0]
 
+        # as a last resort, grab name from stat
         if not proc_name:
             # name from stat has the form: '(name)'
             return self.get_stat_info(1)[1:-1]
         return os.path.basename(proc_name)
 
-    @property
     def mem_usage(self):
         pass
 
-    @property
     def priority(self):
-        return self.get_stat_info(17)
+        return int(self.get_stat_info(17))
 
-    @property
     def nice(self):
-        return self.get_stat_info(18)
+        return int(self.get_stat_info(18))
 
-    @property
     def parent_pid(self):
         if not self._parent:
             self._parent = self.get_stat_info(3)
         return int(self._parent)
 
-    @property
-    # TODO: look more into real vs effective UID
     def owner(self):
         with open(self.get_full_path(ProcInfoFileName.STATUS)) as f:
             for count, line_info in enumerate(f):
                 if count == 7:
+                    # use the real uid
                     ruid = re.split('\s+', line_info)[1]
                     break
         return Process.ProcessOwner(ruid, pwd.getpwuid(int(ruid)).pw_name)
 
-    @property
     def cpu_usage(self):
         pass
 
-    @property
     def state(self):
-        return self.get_stat_info(2)
+        return ProcessStates(self.get_stat_info(2))
 
     @property
     def mem_map(self):
@@ -120,28 +113,39 @@ class Process(object):
         with open(self.get_full_path(ProcInfoFileName.MEM_MAP)) as f:
             return [Process.MappedRegion(re.split('\s+', entry)) for entry in f]
 
-    @property
     def cwd(self):
         return os.readlink(self.get_full_path(ProcInfoFileName.CWD))
 
-    @property
-    def descriptors(self):
-        fd_path = self.get_full_path(ProcInfoFileName.FD)
-        # TODO: use python-magic to implement the type field for descriptors
-        return [Process.FileDescriptor(fid, 'UNIMPLEMENTED', os.readlink(os.path.join(fd_path, fid)))
-            for fid in os.listdir(fd_path)]
+    def descriptors(self, fspathonly=False):
+        fd_dir = self.get_full_path(ProcInfoFileName.FD)
+        descriptor_list = []
+        for fd in os.listdir(fd_dir):
+            fd_file_path = os.path.join(fd_dir, fd)
+            fd_obj = os.readlink(fd_file_path)
+            is_fs_file = '/' in fd_obj
+            # if fspathonly is set, do not include the fds
+            # that do not exist in the filesystem
+            if fspathonly and not is_fs_file:
+                continue
 
-    @property
+            fd_type = 'file'
+            # a 'special' file such as socket or a pipe
+            # e.g. pipe:[123664], socket:[7842325]
+            if ':' in fd_obj and not is_fs_file:
+                fd_type = fd_obj.split(':')[0]
+
+            descriptor_list.append(Process.FileDescriptor(int(fd),fd_type, fd_obj))
+
+        return descriptor_list
+
     def threads(self):
         return [Process(tid, self) for tid in os.listdir(os.path.join(
             self.pid_dir, ProcInfoFileName.THREADS))]
 
-    @property
     def cmdline(self):
         if not self._cmdline:
             with open(self.get_full_path(ProcInfoFileName.CMDLINE)) as f:
                 # cmdline args are separated by null characters and terminated
                 # by a null character
-                self._cmdline = f.read().replace('\x00', ' ')[:-1]
-
+                self._cmdline = f.read().split('\0')[:-1]
         return self._cmdline
