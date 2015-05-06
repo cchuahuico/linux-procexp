@@ -107,7 +107,6 @@ class Process(object):
     def state(self):
         return ProcessStates(self.get_stat_info(2))
 
-    @property
     def mem_map(self):
         # TODO: look into adding the libraries to the descriptors list
         with open(self.get_full_path(ProcInfoFileName.MEM_MAP)) as f:
@@ -135,7 +134,6 @@ class Process(object):
                 fd_type = fd_obj.split(':')[0]
 
             descriptor_list.append(Process.FileDescriptor(int(fd),fd_type, fd_obj))
-
         return descriptor_list
 
     def threads(self):
