@@ -5,7 +5,7 @@ import pwd
 from collections import namedtuple
 from enum import Enum
 
-class ProcessStates(Enum):
+class ProcessState(Enum):
     ZOMBIE = 'Z'
     RUNNING = 'R'
     SLEEPING = 'S'
@@ -26,9 +26,9 @@ class ProcInfoFileName:
 class Process(object):
     PROC_PATH = '/proc'
 
-    Owner = namedtuple('ProcessOwner', ['uid', 'name'])
+    Owner = namedtuple('Owner', ['uid', 'name'])
     FileDescriptor = namedtuple('FileDescriptor', ['id', 'type', 'name'])
-    MappedRegion = namedtuple('MappedRegions', ['start', 'end', 'permissions',
+    MappedRegion = namedtuple('MappedRegion', ['start', 'end', 'permissions',
                                                 'offset', 'dev', 'inode', 'file_path'])
     VirtualMemory = namedtuple('VirtualMemory', ['vsize', 'rss'])
 
@@ -39,7 +39,7 @@ class Process(object):
 
         # if the Process object is initialized with a parent, it is treated as a thread
         # and will have a different directory  representing its runtime objects
-        self.pid_dir = os.path.join(self.PROC_PATH, str(parent.pid), ProcInfoFileName.THREADS, self._pid) \
+        self.pid_dir = os.path.join(self.PROC_PATH, str(parent.pid()), ProcInfoFileName.THREADS, self._pid) \
             if parent else os.path.join(self.PROC_PATH, self._pid)
 
         if not os.path.exists(self.pid_dir):
@@ -82,11 +82,11 @@ class Process(object):
         # as a last resort, grab name from stat
         if not proc_name:
             # name from stat has the form: '(name)'
-            return self.get_stat_info(1)[1:-1]
+            return self.get_stat_info(1).rstrip('(', ')')
         return os.path.basename(proc_name)
 
     def virtual_memory(self):
-        return Process.VirtualMemory(int(self.get_stat_info(22) / 1024),
+        return Process.VirtualMemory(int(self.get_stat_info(22)) / 1024,
                                      int(self.get_stat_info(23)) / 1024)
 
     def memory_percent(self):
@@ -115,7 +115,7 @@ class Process(object):
     def cpu_percent(self):
         with open(os.path.join(self.PROC_PATH, ProcInfoFileName.STAT)) as f:
             # add the aggregated (all cpus) jiffies stored in the first line
-            total_work = sum(int(val) for val in re.split('\s+', f.readline())[1:])
+            total_work = sum(int(val) for val in re.split('\s+', f.readline().rstrip())[1:])
 
         proc_work = int(self.get_stat_info(13)) + int(self.get_stat_info(14))
         cpu_percent = (proc_work - self._last_proc_work) / \
@@ -125,15 +125,25 @@ class Process(object):
         return cpu_percent
 
     def state(self):
-        return ProcessStates(self.get_stat_info(2))
+        return ProcessState(self.get_stat_info(2))
 
-    def memory_maps(self):
+    def memory_maps(self, resolvedev=True):
         with open(self.get_full_path(ProcInfoFileName.MEM_MAP)) as f:
             maps = []
-            for mapping in f:
-                addr_range, perms, offset, dev, inode, obj = re.split('\s+', mapping)
-                maps.append(Process.MappedRegion(addr_range.split('-'), perms,
-                                                 offset, dev, inode, obj))
+            for line in f:
+                map_toks = re.split('\s+', line)
+                start, end = map_toks[0].split('-')
+                if resolvedev:
+                    major, minor = map_toks[3].split(':')
+                    try:
+                        # TODO major minor here do not correspond to /proc/partitions
+                        dev_name = ProcUtil.dev_name(int(major), int(minor))
+                    except DeviceNameNotFound:
+                        dev_name = ''
+                else:
+                    dev_name = map_toks[3]
+                maps.append(Process.MappedRegion(start, end, map_toks[1], map_toks[2],
+                                                 dev_name, map_toks[4], map_toks[5]))
         return maps
 
     def cwd(self):
@@ -206,6 +216,6 @@ class ProcUtil(object):
                 # by default mem info is in KB, return everything in bytes
                 mem_data.append(int(re.split('\s+', entry)[1]) / 1024)
                 # not interested in other mem info
-                if i == 8:
+                if i == 7:
                     break
-        return ProcUtil.MemInfo(mem_data)
+        return ProcUtil.MemInfo(*mem_data)
