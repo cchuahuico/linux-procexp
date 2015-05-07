@@ -191,7 +191,7 @@ class ProcUtil(object):
 
     @staticmethod
     def pids():
-        return [entry for entry in os.listdir('/proc') if re.match('\d+', entry)]
+        return [int(entry) for entry in os.listdir('/proc') if re.match('\d+', entry)]
 
     @staticmethod
     def dev_name(major, minor):
