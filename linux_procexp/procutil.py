@@ -26,10 +26,11 @@ class ProcInfoFileName:
 class Process(object):
     PROC_PATH = '/proc'
 
-    ProcessOwner = namedtuple('ProcessOwner', ['uid', 'name'])
+    Owner = namedtuple('ProcessOwner', ['uid', 'name'])
     FileDescriptor = namedtuple('FileDescriptor', ['id', 'type', 'name'])
     MappedRegion = namedtuple('MappedRegions', ['start', 'end', 'permissions',
                                                 'offset', 'dev', 'inode', 'file_path'])
+    VirtualMemory = namedtuple('VirtualMemory', ['vsize', 'rss'])
 
     def __init__(self, pid, parent=None):
         # initializer takes pid as an int since it's more intuitive for the class
@@ -78,8 +79,15 @@ class Process(object):
             return self.get_stat_info(1)[1:-1]
         return os.path.basename(proc_name)
 
-    def mem_usage(self):
+    def virtual_memory(self):
+        return Process.VirtualMemory(int(self.get_stat_info(22) / 1024),
+                                     int(self.get_stat_info(23)) / 1024)
+
+    def swap_memory(self):
         pass
+
+    def memory_percent(self):
+        return self.virtual_memory().rss / ProcUtil.memory_info().total * 100
 
     def priority(self):
         return int(self.get_stat_info(17))
@@ -99,7 +107,7 @@ class Process(object):
                     # use the real uid
                     ruid = re.split('\s+', line_info)[1]
                     break
-        return Process.ProcessOwner(ruid, pwd.getpwuid(int(ruid)).pw_name)
+        return Process.Owner(ruid, pwd.getpwuid(int(ruid)).pw_name)
 
     def cpu_usage(self):
         pass
@@ -107,10 +115,14 @@ class Process(object):
     def state(self):
         return ProcessStates(self.get_stat_info(2))
 
-    def mem_map(self):
-        # TODO: look into adding the libraries to the descriptors list
+    def memory_maps(self):
         with open(self.get_full_path(ProcInfoFileName.MEM_MAP)) as f:
-            return [Process.MappedRegion(re.split('\s+', entry)) for entry in f]
+            maps = []
+            for mapping in f:
+                addr_range, perms, offset, dev, inode, obj = re.split('\s+', mapping)
+                maps.append(Process.MappedRegion(addr_range.split('-'), perms,
+                                                 offset, dev, inode, obj))
+        return maps
 
     def cwd(self):
         return os.readlink(self.get_full_path(ProcInfoFileName.CWD))
@@ -148,7 +160,40 @@ class Process(object):
                 self._cmdline = f.read().split('\0')[:-1]
         return self._cmdline
 
+class DeviceNameNotFound(Exception):
+    pass
+
 class ProcUtil(object):
+    MemInfo = namedtuple('MemInfo', ['total', 'free', 'available', 'buffers', 'cached',
+                                     'swapcached', 'active', 'inactive'])
+
     @staticmethod
     def pids():
         return [entry for entry in os.listdir('/proc') if re.match('\d+', entry)]
+
+    @staticmethod
+    def dev_name(major, minor):
+        with open('/proc/partitions') as f:
+            part_table = {}
+            # first line are headers, second line is a blank line
+            next(f); next(f)
+            for dev_entry in f:
+                fields = re.split('\s+', dev_entry)
+            part_table[(fields[0], fields[1])] = fields[3]
+
+        try:
+            return part_table[(major, minor)]
+        except KeyError:
+            raise DeviceNameNotFound('No device name mapping for {}:{}'.format(major, minor))
+
+    @staticmethod
+    def memory_info():
+        with open('/proc/meminfo') as f:
+            mem_data = []
+            for i, entry in enumerate(f):
+                # by default mem info is in KB, return everything in bytes
+                mem_data.append(int(re.split('\s+', entry)[1]) / 1024)
+                # not interested in other mem info
+                if i == 8:
+                    break
+        return ProcUtil.MemInfo(mem_data)
