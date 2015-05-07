@@ -47,6 +47,13 @@ class Process(object):
 
         self._parent = parent
 
+        # both these variables are used to calculate the cpu percent use
+        # of this process. remembering the old values is needed because we
+        # want this to behave more like top rather than ps in that the percentage
+        # is computed based on time (e.g. cpu % for last second)
+        self._last_total_work = 0
+        self._last_proc_work = 0
+
         # all the instance variables defined from here are computed only when needed
         # because either the information is not included in the default view or they
         # are likely to change during the process' execution
@@ -55,7 +62,6 @@ class Process(object):
     def get_full_path(self, dir_name):
         return os.path.join(self.pid_dir, dir_name)
 
-    # TODO: look into the linecache module for optimization
     def get_stat_info(self, prop_idx):
         with open(self.get_full_path(ProcInfoFileName.STAT)) as f:
             return f.read().split(' ')[prop_idx]
@@ -83,9 +89,6 @@ class Process(object):
         return Process.VirtualMemory(int(self.get_stat_info(22) / 1024),
                                      int(self.get_stat_info(23)) / 1024)
 
-    def swap_memory(self):
-        pass
-
     def memory_percent(self):
         return self.virtual_memory().rss / ProcUtil.memory_info().total * 100
 
@@ -109,8 +112,17 @@ class Process(object):
                     break
         return Process.Owner(ruid, pwd.getpwuid(int(ruid)).pw_name)
 
-    def cpu_usage(self):
-        pass
+    def cpu_percent(self):
+        with open(os.path.join(self.PROC_PATH, ProcInfoFileName.STAT)) as f:
+            # add the aggregated (all cpus) jiffies stored in the first line
+            total_work = sum(int(val) for val in re.split('\s+', f.readline())[1:])
+
+        proc_work = int(self.get_stat_info(13)) + int(self.get_stat_info(14))
+        cpu_percent = (proc_work - self._last_proc_work) / \
+                      (total_work- self._last_total_work) * 100
+        self._last_total_work = total_work
+        self._last_proc_work = proc_work
+        return cpu_percent
 
     def state(self):
         return ProcessStates(self.get_stat_info(2))
