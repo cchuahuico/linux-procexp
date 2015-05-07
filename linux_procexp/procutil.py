@@ -73,17 +73,17 @@ class Process(object):
         # TODO: decide what to do with kernel support. for example, this is only
         # valid for kernel >= 2.2
         try:
-            proc_name = os.readlink(os.path.join(self.pid_dir, ProcInfoFileName.EXE))
+            proc_name = os.path.basename(os.readlink(os.path.join(
+                self.pid_dir, ProcInfoFileName.EXE)))
         except PermissionError:
             # most of the time exe has more stringent permissions so
             # grab the name from the cmdline instead
-            proc_name = self.cmdline()[0]
-
-        # as a last resort, grab name from stat
-        if not proc_name:
-            # name from stat has the form: '(name)'
-            return self.get_stat_info(1).rstrip('(', ')')
-        return os.path.basename(proc_name)
+            proc_name = self.cmdline()
+            if proc_name:
+                proc_name = os.path.basename(proc_name[0])
+            else:
+                proc_name = self.get_stat_info(1).strip("()")
+        return proc_name
 
     def virtual_memory(self):
         return Process.VirtualMemory(int(self.get_stat_info(22)) / 1024,
