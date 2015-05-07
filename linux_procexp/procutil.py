@@ -78,9 +78,11 @@ class Process(object):
         except PermissionError:
             # most of the time exe has more stringent permissions so
             # grab the name from the cmdline instead
-            proc_name = self.cmdline()
-            if proc_name:
-                proc_name = os.path.basename(proc_name[0])
+            cmdline = self.cmdline()
+            if cmdline:
+                proc_name = cmdline[0]
+                if os.path.exists(proc_name):
+                    proc_name = os.path.basename(proc_name)
             else:
                 proc_name = self.get_stat_info(1).strip("()")
         return proc_name
