@@ -110,18 +110,22 @@ class Process(object):
             for count, line_info in enumerate(f):
                 if count == 7:
                     # use the real uid
-                    ruid = re.split('\s+', line_info)[1]
+                    ruid = line_info.split()[1]
                     break
         return Process.Owner(ruid, pwd.getpwuid(int(ruid)).pw_name)
 
     def cpu_percent(self):
         with open(os.path.join(self.PROC_PATH, ProcInfoFileName.STAT)) as f:
             # add the aggregated (all cpus) jiffies stored in the first line
-            total_work = sum(int(val) for val in re.split('\s+', f.readline().rstrip())[1:])
+            total_work = sum(int(val) for val in f.readline().split()[1:])
 
         proc_work = int(self.get_stat_info(13)) + int(self.get_stat_info(14))
-        cpu_percent = (proc_work - self._last_proc_work) / \
-                      (total_work- self._last_total_work) * 100
+        try:
+            cpu_percent = (proc_work - self._last_proc_work) / \
+                          (total_work - self._last_total_work) * 100
+        except ZeroDivisionError:
+            cpu_percent = 0
+
         self._last_total_work = total_work
         self._last_proc_work = proc_work
         return cpu_percent
@@ -133,7 +137,7 @@ class Process(object):
         with open(self.get_full_path(ProcInfoFileName.MEM_MAP)) as f:
             maps = []
             for line in f:
-                map_toks = re.split('\s+', line)
+                map_toks = line.split()
                 start, end = map_toks[0].split('-')
                 if resolvedev:
                     major, minor = map_toks[3].split(':')
@@ -179,9 +183,14 @@ class Process(object):
     def cmdline(self):
         if not self._cmdline:
             with open(self.get_full_path(ProcInfoFileName.CMDLINE)) as f:
-                # cmdline args are separated by null characters and terminated
-                # by a null character
-                self._cmdline = f.read().split('\0')[:-1]
+                line = f.read().rstrip('\0')
+                if line.count('\0') == 0:
+                    # contrary to man, the commandline arguments are sometimes not
+                    # separated by a null byte (e.g. some chromium processes)
+                    self._cmdline = line.split()
+                else:
+                    self._cmdline = line.split('\0')
+
         return self._cmdline
 
 class DeviceNameNotFound(Exception):
@@ -202,7 +211,7 @@ class ProcUtil(object):
             # first line are headers, second line is a blank line
             next(f); next(f)
             for dev_entry in f:
-                fields = re.split('\s+', dev_entry)
+                fields = dev_entry.split()
             part_table[(fields[0], fields[1])] = fields[3]
 
         try:
@@ -216,7 +225,7 @@ class ProcUtil(object):
             mem_data = []
             for i, entry in enumerate(f):
                 # by default mem info is in KB, return everything in bytes
-                mem_data.append(int(re.split('\s+', entry)[1]) / 1024)
+                mem_data.append(int(entry.split()[1]) / 1024)
                 # not interested in other mem info
                 if i == 7:
                     break
