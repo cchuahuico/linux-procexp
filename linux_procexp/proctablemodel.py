@@ -34,22 +34,32 @@ class ProcessNode(object):
                 return i
         return -1
 
+    def removeChild(self, childNode):
+        self.children.remove(childNode)
+
     def childAtRow(self, row):
         return self.children[row]
 
     def update(self):
         if self.pid == 0:
-            return
-        self.properties = [
-            self.data.name(),
-            round(self.data.cpu_percent(), 2),
-            round(self.data.memory_percent(), 2),
-            self.data.pid(),
-            '{} M'.format(round(self.data.virtual_memory().rss / 2048)),
-            self.data.owner().name,
-            self.data.nice(),
-            self.data.priority(),
-        ]
+            return True
+        try:
+            self.properties = [
+                self.data.name(),
+                round(self.data.cpu_percent(), 2),
+                round(self.data.memory_percent(), 2),
+                self.data.pid(),
+                '{} M'.format(round(self.data.virtual_memory().rss / 2048)),
+                self.data.owner().name,
+                self.data.nice(),
+                self.data.priority(),
+            ]
+            return True
+        # this process no longer exists
+        except FileNotFoundError:
+            self.parent.removeChild(self)
+            self.parent = None
+            return False
 
     def fields(self, colIdx):
         return self.properties[colIdx]
@@ -64,12 +74,12 @@ class ProcTableModel(QAbstractItemModel):
         self.initializeProcTree()
 
     def updateNodes(self, node):
-        node.update()
-        if not node.children:
-            return
+        if node.update():
+            if not node.children:
+                return
 
-        for child in node.children:
-            self.updateNodes(child)
+            for child in node.children:
+                self.updateNodes(child)
 
     def update(self):
         self.updateNodes(self.root)
