@@ -2,6 +2,7 @@ import os
 import os.path
 import re
 import pwd
+import linecache
 from collections import namedtuple
 from enum import Enum
 
@@ -88,8 +89,18 @@ class Process(object):
         return proc_name
 
     def virtual_memory(self):
-        return Process.VirtualMemory(int(self.get_stat_info(22)) / 1024,
-                                     int(self.get_stat_info(23)) / 1024)
+        status_file_path = os.path.join(self.pid_dir, ProcInfoFileName.STATUS)
+        linecache.checkcache(status_file_path)
+        vmsize = linecache.getline(status_file_path, 13).split()
+        # some processes (kthreadd lineage) do not have rss/vmsize in these lines
+        # so return 0 for them
+        if vmsize[0].lower() == 'vmsize:':
+            vmsize = int(vmsize[1]) * 1024
+            rss = int(linecache.getline(status_file_path, 17).split()[1]) * 1024
+        else:
+            vmsize = 0
+            rss = 0
+        return Process.VirtualMemory(vmsize, rss)
 
     def memory_percent(self):
         return self.virtual_memory().rss / ProcUtil.memory_info().total * 100
@@ -225,7 +236,7 @@ class ProcUtil(object):
             mem_data = []
             for i, entry in enumerate(f):
                 # by default mem info is in KB, return everything in bytes
-                mem_data.append(int(entry.split()[1]) / 1024)
+                mem_data.append(int(entry.split()[1]) * 1024)
                 # not interested in other mem info
                 if i == 7:
                     break
