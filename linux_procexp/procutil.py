@@ -65,7 +65,7 @@ class Process(object):
 
     def get_stat_info(self, prop_idx):
         with open(self.get_full_path(ProcInfoFileName.STAT)) as f:
-            return f.read().split(' ')[prop_idx]
+            return f.read().split()[prop_idx]
 
     def pid(self):
         return int(self._pid)
