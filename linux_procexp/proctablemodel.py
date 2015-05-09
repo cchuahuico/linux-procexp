@@ -1,23 +1,22 @@
-# -*- coding: utf-8 -*-
-
 import re
 import os
 import os.path
-from PyQt4.QtCore import QAbstractItemModel, Qt, QModelIndex, QVariant
-from .process import Process
+from PyQt4.QtCore import QAbstractItemModel, Qt, QModelIndex
+from .procutil import Process, ProcUtil
 
 class ProcessNode(object):
     def __init__(self, pid, parent=None):
+        self.pid = pid
         if pid == 0:
             # The node with pid = 0 is a dummy node used as the root node
             # and the parent of both init (pid = 1) and kthreadd (pid = 2)
             # This is needed because in Linux (at least) the kernel thread
             # daemon does not have init as its ppid
             self.data = None
-            self.fields = []
         else:
             self.data = Process(pid)
-            self.fields = [self.data.name, self.data.pid, self.data.owner.name]
+            self.properties = []
+            self.update()
 
         self.children = []
         self.parent = parent
@@ -38,35 +37,55 @@ class ProcessNode(object):
     def childAtRow(self, row):
         return self.children[row]
 
+    def update(self):
+        if self.pid == 0:
+            return
+        self.properties = [
+            self.data.name(),
+            round(self.data.cpu_percent(), 2),
+            round(self.data.memory_percent(), 2),
+            self.data.pid(),
+            '{} M'.format(round(self.data.virtual_memory().rss / 2048)),
+            self.data.owner().name,
+            self.data.nice(),
+            self.data.priority(),
+        ]
+
     def fields(self, colIdx):
-        return self.fields[colIdx]
+        return self.properties[colIdx]
 
 class ProcTableModel(QAbstractItemModel):
     def __init__(self, parent=None):
         super().__init__(parent)
 
         # headers or columns available in the treeview
-        self.headers = ['Name', 'PID', 'Owner']
+        self.headers = ['Process Name', 'CPU %', 'Mem %', 'PID',
+                        'RSS', 'User', 'Nice', 'Priority']
         self.initializeProcTree()
 
-    def initializeProcTree(self):
-        pids = []
-        for path in os.listdir('/proc'):
-            base = os.path.basename(path)
-            if re.match('\d+', base):
-                pids.append(int(base))
+    def updateNodes(self, node):
+        node.update()
+        if not node.children:
+            return
 
-        # the root is always the process whose pid is 1
+        for child in node.children:
+            self.updateNodes(child)
+
+    def update(self):
+        self.updateNodes(self.root)
+
+    def initializeProcTree(self):
+        # add a dummy root as this is not included in the treeview
         self.root = ProcessNode(0)
         procTable = {0: self.root}
 
-        for pid in pids:
+        for pid in ProcUtil.pids():
             if pid in procTable:
                 node = procTable[pid]
             else:
                 node = ProcessNode(pid)
                 procTable[pid] = node
-            ppid = node.data.parent_pid
+            ppid = node.data.parent_pid()
             if ppid not in procTable:
                 procTable[ppid] = ProcessNode(ppid)
             procTable[ppid].insertChild(node)
@@ -93,7 +112,7 @@ class ProcTableModel(QAbstractItemModel):
     def data(self, mIdx, role=Qt.DisplayRole):
         if role == Qt.DisplayRole:
             node = self.nodeFromIndex(mIdx)
-            return node.fields[mIdx.column()]
+            return node.fields(mIdx.column())
         return None
 
     def headerData(self, section, orientation, role=Qt.DisplayRole):
