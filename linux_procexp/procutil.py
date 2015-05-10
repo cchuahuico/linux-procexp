@@ -59,6 +59,7 @@ class Process(object):
         # because either the information is not included in the default view or they
         # are likely to change during the process' execution
         self._cmdline = ''
+        self._name = ''
 
     def get_full_path(self, dir_name):
         return os.path.join(self.pid_dir, dir_name)
@@ -73,6 +74,9 @@ class Process(object):
     def name(self):
         # TODO: decide what to do with kernel support. for example, this is only
         # valid for kernel >= 2.2
+        if self._name:
+            return self._name
+
         try:
             proc_name = os.path.basename(os.readlink(os.path.join(
                 self.pid_dir, ProcInfoFileName.EXE)))
@@ -86,6 +90,8 @@ class Process(object):
                     proc_name = os.path.basename(proc_name)
             else:
                 proc_name = self.get_stat_info(1).strip("()")
+
+        self._name = proc_name
         return proc_name
 
     def virtual_memory(self):
@@ -130,7 +136,11 @@ class Process(object):
             # add the aggregated (all cpus) jiffies stored in the first line
             total_work = sum(int(val) for val in f.readline().split()[1:])
 
-        proc_work = int(self.get_stat_info(13)) + int(self.get_stat_info(14))
+        with open(self.pid_dir + '/stat') as f:
+            props = f.read().split()
+
+        proc_work = int(props[13]) + int(props[14])
+
         try:
             cpu_percent = (proc_work - self._last_proc_work) / \
                           (total_work - self._last_total_work) * 100
@@ -203,6 +213,24 @@ class Process(object):
                     self._cmdline = line.split('\0')
 
         return self._cmdline
+
+    def get_props(self):
+        Props = namedtuple('Props', ['pid', 'name', 'cpu', 'mem', 'rss', 'nice', 'priority', 'owner'])
+        with open(self.pid_dir + '/stat') as f:
+            stats = f.readline().split()
+            nice = int(stats[18])
+            priority = int(stats[17])
+
+        status_file = self.pid_dir + '/status'
+        linecache.checkcache(status_file)
+        ruid = int(linecache.getline(status_file, 8).split()[1])
+        user = pwd.getpwuid(ruid).pw_name
+        rss_line = linecache.getline(status_file, 17).split()
+        rss = int(rss_line[1]) if rss_line[0].lower() == 'vmrss:' else 0
+        mem = rss / ProcUtil.memory_info().total * 100
+        return Props(self._pid, self.name(), round(self.cpu_percent(), 2),
+                     round(mem, 2), rss / 1048576, nice, priority, user)
+
 
 class DeviceNameNotFound(Exception):
     pass
