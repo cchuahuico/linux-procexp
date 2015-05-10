@@ -1,12 +1,16 @@
 import re
 import os
 import os.path
+import time
+import threading
 from PyQt4.QtCore import QAbstractItemModel, Qt, QModelIndex
 from .procutil import Process, ProcUtil
 
 class ProcessNode(object):
     def __init__(self, pid, parent=None):
         self.pid = pid
+        #self.lock = threading.Lock()
+
         if pid == 0:
             # The node with pid = 0 is a dummy node used as the root node
             # and the parent of both init (pid = 1) and kthreadd (pid = 2)
@@ -16,10 +20,12 @@ class ProcessNode(object):
         else:
             self.data = Process(pid)
             self.properties = []
+            #self.grabData()
             self.update()
 
         self.children = []
         self.parent = parent
+
 
     def __len__(self):
         return len(self.children)
@@ -40,20 +46,20 @@ class ProcessNode(object):
     def childAtRow(self, row):
         return self.children[row]
 
+    def grabData(self):
+        if self.pid == 0:
+            self.newprops = []
+            return
+        self.newprops = self.data.get_props()
+
     def update(self):
         if self.pid == 0:
             return True
         try:
-            self.properties = [
-                self.data.name(),
-                round(self.data.cpu_percent(), 2),
-                round(self.data.memory_percent(), 2),
-                self.data.pid(),
-                '{} M'.format(round(self.data.virtual_memory().rss / 2048)),
-                self.data.owner().name,
-                self.data.nice(),
-                self.data.priority(),
-            ]
+            #with self.lock:
+            self.properties = self.data.get_props()
+
+            #self.properties = [ 1,2,3,4,5,6,7,8]
             return True
         # this process no longer exists
         except FileNotFoundError:
@@ -73,16 +79,15 @@ class ProcTableModel(QAbstractItemModel):
                         'RSS', 'User', 'Nice', 'Priority']
         self.initializeProcTree()
 
-    def updateNodes(self, node):
-        if node.update():
-            if not node.children:
-                return
-
-            for child in node.children:
-                self.updateNodes(child)
-
     def update(self):
-        self.updateNodes(self.root)
+        def updateNodes(node):
+            if node.update():
+                if not node.children:
+                    return
+
+                for child in node.children:
+                    updateNodes(child)
+        updateNodes(self.root)
 
     def initializeProcTree(self):
         # add a dummy root as this is not included in the treeview
