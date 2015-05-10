@@ -18,7 +18,7 @@ class ProcExpWindow(QMainWindow):
 
     def initUI(self):
         self.initMenuBar()
-        self.setGeometry(300, 300, 950, 650)
+        self.setGeometry(300, 300, 1050, 650)
         self.setWindowTitle('Linux Process Explorer')
         self.setCentralWidget(ProcTableWidget(self))
 
