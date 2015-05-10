@@ -1,6 +1,6 @@
 import threading
 from PyQt4.QtGui import QTreeView
-from PyQt4.QtCore import QTimer, QThread, QObject, pyqtSignal
+from PyQt4.QtCore import QTimer, QThread, QObject, pyqtSignal, pyqtSlot
 from ..proctablemodel import ProcTableModel
 import time
 
@@ -11,11 +11,13 @@ class Worker(QObject):
         super().__init__()
         self.model = model
 
+    @pyqtSlot()
     def repeat(self):
         self.timer = QTimer()
         self.timer.timeout.connect(self.update)
         self.timer.start(2000)
 
+    @pyqtSlot()
     def update(self):
         time.sleep(0.5)
         def updateNodes(node):
@@ -52,6 +54,7 @@ class ProcTableWidget(QTreeView):
         self.thread.start()
 
 
+    @pyqtSlot()
     def updateAll(self):
         self.reset()
         #self.model.beginResetModel()
