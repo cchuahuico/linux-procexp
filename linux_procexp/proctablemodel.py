@@ -46,7 +46,17 @@ class ProcessNode(object):
     def update(self):
         with self._lock:
             try:
-                self.properties = self.data.get_props()
+                proc = self.data
+                self.properties = [
+                    proc.name(),
+                    round(proc.cpu_percent(), 2) or "",
+                    round(proc.memory_percent(), 2) or "",
+                    proc.pid(),
+                    "{}M".format(proc.virtual_memory().rss // 1048576),
+                    proc.owner().name,
+                    proc.nice(),
+                    proc.priority()
+                ]
                 return True
             # this process no longer exists
             except FileNotFoundError:
