@@ -1,5 +1,5 @@
 from PyQt4.QtGui import QTreeView
-from PyQt4.QtCore import QTimer, QThread, QObject, pyqtSignal, pyqtSlot
+from PyQt4.QtCore import QTimer, QThread, QObject, pyqtSignal, pyqtSlot, QModelIndex
 from ..proctablemodel import ProcTableModel, ProcTableModelRefresher
 
 class ProcTableWidget(QTreeView):
@@ -14,12 +14,6 @@ class ProcTableWidget(QTreeView):
 
         self.refreshThread = QThread(self)
         self.modelRefresher = ProcTableModelRefresher(self.model)
-        self.modelRefresher.modelRefresh.connect(self.updateView)
         self.modelRefresher.moveToThread(self.refreshThread)
         self.refreshThread.started.connect(self.modelRefresher.startRefreshTimer)
         self.refreshThread.start()
-
-    @pyqtSlot()
-    def updateView(self):
-        self.model.reset()
-        self.expandAll()

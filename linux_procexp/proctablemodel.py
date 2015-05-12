@@ -93,6 +93,12 @@ class ProcTableModelRefresher(QObject):
         # have a process associated with it
         for child in self.root.children:
             updateNodes(child)
+
+        # tell the view that the underlying data has been updated
+        # TODO: should this be done on the view?
+        self.model.dataChanged.emit(QModelIndex(), QModelIndex())
+
+        # TODO: unused for now
         self.modelRefresh.emit()
 
 
