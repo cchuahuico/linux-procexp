@@ -1,37 +1,6 @@
-import threading
 from PyQt4.QtGui import QTreeView
 from PyQt4.QtCore import QTimer, QThread, QObject, pyqtSignal, pyqtSlot
-from ..proctablemodel import ProcTableModel
-import time
-
-class Worker(QObject):
-    dataReady = pyqtSignal()
-
-    def __init__(self, model):
-        super().__init__()
-        self.model = model
-
-    @pyqtSlot()
-    def repeat(self):
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.update)
-        self.timer.start(2000)
-
-    @pyqtSlot()
-    def update(self):
-        time.sleep(0.5)
-        def updateNodes(node):
-
-            if node.update():
-                if not node.children:
-                    return
-
-                for child in node.children:
-                    updateNodes(child)
-        updateNodes(self.model)
-
-        self.dataReady.emit()
-
+from ..proctablemodel import ProcTableModel, ProcTableModelRefresher
 
 class ProcTableWidget(QTreeView):
     def __init__(self, parent=None):
@@ -42,26 +11,15 @@ class ProcTableWidget(QTreeView):
         self.setModel(self.model)
         self.expandAll()
         self.resizeColumnToContents(0)
-        #self.timer = QTimer(self)
-        #self.timer.timeout.connect(self.spawn)
-        #self.timer.start(3000)
 
-        self.thread = QThread(self)
-        self.obj = Worker(self.model.root)
-        self.obj.dataReady.connect(self.updateAll)
-        self.thread.started.connect(self.obj.repeat)
-        self.obj.moveToThread(self.thread)
-        self.thread.start()
-
+        self.refreshThread = QThread(self)
+        self.modelRefresher = ProcTableModelRefresher(self.model)
+        self.modelRefresher.modelRefresh.connect(self.updateView)
+        self.modelRefresher.moveToThread(self.refreshThread)
+        self.refreshThread.started.connect(self.modelRefresher.startRefreshTimer)
+        self.refreshThread.start()
 
     @pyqtSlot()
-    def updateAll(self):
-        self.reset()
-        #self.model.beginResetModel()
-        #self.model().update()
-        #self.model.endResetModel()
-        #self.model().reset()
+    def updateView(self):
+        self.model.reset()
         self.expandAll()
-
-
-
