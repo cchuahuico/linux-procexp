@@ -45,24 +45,17 @@ class ProcessNode(object):
     # the update can be slow and causes the GUI to lag
     def update(self):
         with self._lock:
-            try:
-                proc = self.data
-                self.properties = [
-                    proc.name(),
-                    round(proc.cpu_percent(), 2) or "",
-                    round(proc.memory_percent(), 2) or "",
-                    proc.pid(),
-                    "{}M".format(proc.virtual_memory().rss // 1048576),
-                    proc.owner().name,
-                    proc.nice(),
-                    proc.priority()
-                ]
-                return True
-            # this process no longer exists
-            except FileNotFoundError:
-                self.parent.removeChild(self)
-                self.parent = None
-                return False
+            proc = self.data
+            self.properties = [
+                proc.name(),
+                round(proc.cpu_percent(), 2) or "",
+                round(proc.memory_percent(), 2) or "",
+                proc.pid(),
+                "{}M".format(proc.virtual_memory().rss // 1048576),
+                proc.owner().name,
+                proc.nice(),
+                proc.priority()
+            ]
 
     def fields(self, colIdx):
         with self._lock:
@@ -75,6 +68,7 @@ class ProcTableModelRefresher(QObject):
     def __init__(self, model, refreshInterval=2000, parent=None):
         super().__init__(parent)
         self.model = model
+        self.procTable = model.procTable
         self.root = model.root
         self.refreshInterval = refreshInterval
         self.timer = QTimer(self)
@@ -96,9 +90,21 @@ class ProcTableModelRefresher(QObject):
     @pyqtSlot()
     def refresh(self):
         def updateNodes(node):
-            if node.update():
+            try:
+                node.update()
                 for child in node.children:
                     updateNodes(child)
+            # process no longer exists
+            except FileNotFoundError:
+                parent = node.parent
+                grandParent = parent.parent
+                parentMIdx = self.model.createIndex(grandParent.rowOfChild(parent), 0, grandParent)
+                childIdx = parent.rowOfChild(node)
+                parent.removeChild(node)
+                self.model.rowsRemoved.emit(parentMIdx, childIdx, childIdx)
+                #for child in parent.children:
+                    #del self.procTable[child.pid]
+
         # don't update the dummy root node since it doesn't
         # have a process associated with it
         for child in self.root.children:
