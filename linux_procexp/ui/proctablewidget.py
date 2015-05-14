@@ -1,5 +1,5 @@
 from PyQt4.QtGui import QTreeView
-from PyQt4.QtCore import QTimer, QThread, QObject, pyqtSignal, pyqtSlot, QModelIndex
+from PyQt4.QtCore import QThread
 from ..proctablemodel import ProcTableModel, ProcTableModelRefresher
 
 class ProcTableWidget(QTreeView):
