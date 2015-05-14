@@ -1,5 +1,10 @@
-from PyQt4.QtCore import QAbstractItemModel, Qt, QModelIndex, QObject, QTimer, pyqtSignal, pyqtSlot
+import logging
+from PyQt4.QtCore import QAbstractItemModel, Qt, QModelIndex, QObject, \
+     QTimer, pyqtSignal, pyqtSlot
 from .procutil import Process, ProcUtil
+
+LOG_FILENAME = 'linux-procexp.log'
+logging.basicConfig(filename=LOG_FILENAME, level=logging.DEBUG, filemode='w')
 
 class ProcessNode(object):
     def __init__(self, pid, parent=None):
@@ -7,6 +12,7 @@ class ProcessNode(object):
         self.children = []
         self.parent = parent
         self.tempProperties = []
+        self.properties = []
 
         if pid == 0:
             # The node with pid = 0 is a dummy node used as the root node
@@ -16,7 +22,6 @@ class ProcessNode(object):
             self.data = None
         else:
             self.data = Process(pid)
-            self.properties = []
             self.retrieveProperties()
             self.assignProperties()
 
@@ -53,7 +58,7 @@ class ProcessNode(object):
                 proc.priority()
             ]
         except FileNotFoundError:
-            self.tempProperties = None
+            self.tempProperties = []
             raise
 
     # update() and fields() below have to be locked because
@@ -62,20 +67,18 @@ class ProcessNode(object):
     # the update can be slow and causes the GUI to lag
     def assignProperties(self):
         self.properties = self.tempProperties
-        return self.properties is not None
+        return len(self.properties) > 0
 
     def fields(self, colIdx):
             return self.properties[colIdx]
 
 
 class ProcTableModelRefresher(QObject):
-    modelRefresh = pyqtSignal(list, list)
+    modelRefresh = pyqtSignal(list)
 
     def __init__(self, model, refreshInterval=2000, parent=None):
         super().__init__(parent)
-        self.model = model
         self.procTable = model.procTable
-        self.root = model.root
         self.refreshInterval = refreshInterval
         self.timer = QTimer(self)
 
@@ -95,23 +98,22 @@ class ProcTableModelRefresher(QObject):
 
     @pyqtSlot()
     def refresh(self):
-        newProcNodes = []
-        for pid in ProcUtil.pids():
-            if pid not in self.procTable:
-                self.procTable[pid] = Process(pid)
-                newProcNodes.append(pid)
-
-        pidsToRemove = []
         for pid, node in list(self.procTable.items()):
             if pid == 0:
                 continue
             try:
                 node.retrieveProperties()
             except FileNotFoundError:
-                del self.procTable[node.pid]
-                pidsToRemove.append(node.pid)
+                del self.procTable[pid]
 
-        self.modelRefresh.emit(newProcNodes, pidsToRemove)
+        newProcNodes = []
+        for pid in ProcUtil.pids():
+            if pid not in self.procTable:
+                newNode = ProcessNode(pid)
+                self.procTable[pid] = newNode
+                newProcNodes.append(newNode)
+
+        self.modelRefresh.emit(newProcNodes)
 
 
 class ProcTableModel(QAbstractItemModel):
@@ -128,7 +130,7 @@ class ProcTableModel(QAbstractItemModel):
         self.initializeProcTree()
 
     def initializeProcTree(self):
-        print("InitializeProcTree")
+        logging.debug("InitializeProcTree")
         for pid in ProcUtil.pids():
             if pid in self.procTable:
                 node = self.procTable[pid]
@@ -141,9 +143,9 @@ class ProcTableModel(QAbstractItemModel):
             self.procTable[ppid].insertChild(node)
             node.parent = self.procTable[ppid]
 
-    def updateHierarchy(self, newProcNodes):
+    def addNodesToHierarchy(self, newProcNodes):
         for node in newProcNodes:
-            ppid = node.data.parent_pid
+            ppid = node.data.parent_pid()
             node.parent = self.procTable[ppid]
             self.procTable[ppid].insertChild(node)
 
@@ -165,23 +167,26 @@ class ProcTableModel(QAbstractItemModel):
             parentMIdx = self.createIndex(grandParent.rowOfChild(parentNode), 0, grandParent)
             childIdx = parentNode.rowOfChild(root)
             parentNode.removeChild(root)
-            self.model.rowsRemoved.emit(parentMIdx, childIdx, childIdx)
+            root.parent = None
+            self.rowsRemoved.emit(parentMIdx, childIdx, childIdx)
 
-    @pyqtSlot(list, list)
-    def update(self, newProcNodes, pidsToRemove):
-        self.updateHierarchy(newProcNodes)
+    @pyqtSlot(list)
+    def update(self, newProcNodes):
+        if newProcNodes:
+            self.addNodesToHierarchy(newProcNodes)
+
         for child in self.root.children:
             self.updateNodeProperties(child)
+
         self.dataChanged.emit(QModelIndex(), QModelIndex())
 
     def index(self, row, col, parentMIdx):
-        print("index({}, {}, parentMIdx={})".format(row, col, self.nodeFromIndex(parentMIdx).pid))
+        logging.debug("index({}, {}, parentMIdx={})".format(row, col, self.nodeFromIndex(parentMIdx).pid))
         node = self.nodeFromIndex(parentMIdx)
         return self.createIndex(row, col, node.childAtRow(row))
 
     def parent(self, childMIdx):
-        print("parent(childMIdx={})".format(self.nodeFromIndex(childMIdx).pid))
-
+        logging.debug("parent(childMIdx={})".format(self.nodeFromIndex(childMIdx).pid))
         childNode = self.nodeFromIndex(childMIdx)
         parent = childNode.parent
         if not parent:
@@ -190,17 +195,16 @@ class ProcTableModel(QAbstractItemModel):
         return self.createIndex(row, 0, parent)
 
     def rowCount(self, parentMIdx):
-        print("rowCount(parentMIdx={})".format(self.nodeFromIndex(parentMIdx).pid))
+        logging.debug("rowCount(parentMIdx={})".format(self.nodeFromIndex(parentMIdx).pid))
         return len(self.nodeFromIndex(parentMIdx))
 
     def columnCount(self, parentMIdx):
-        print("columnCount(parentMIdx={})".format(self.nodeFromIndex(parentMIdx).pid))
-
+        logging.debug("columnCount(parentMIdx={})".format(self.nodeFromIndex(parentMIdx).pid))
         return len(self.headers)
 
     def data(self, mIdx, role=Qt.DisplayRole):
         if role == Qt.DisplayRole:
-            print("data(mIdx={})".format(self.nodeFromIndex(mIdx).pid))
+            logging.debug("data(mIdx={})".format(self.nodeFromIndex(mIdx).pid))
             node = self.nodeFromIndex(mIdx)
             return node.fields(mIdx.column())
         return None
