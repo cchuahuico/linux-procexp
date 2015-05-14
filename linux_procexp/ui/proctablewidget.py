@@ -15,5 +15,6 @@ class ProcTableWidget(QTreeView):
         self.refreshThread = QThread(self)
         self.modelRefresher = ProcTableModelRefresher(self.model)
         self.modelRefresher.moveToThread(self.refreshThread)
+        self.modelRefresher.modelRefresh.connect(self.model.update)
         self.refreshThread.started.connect(self.modelRefresher.startRefreshTimer)
         self.refreshThread.start()

@@ -1,4 +1,3 @@
-import threading
 from PyQt4.QtCore import QAbstractItemModel, Qt, QModelIndex, QObject, QTimer, pyqtSignal, pyqtSlot
 from .procutil import Process, ProcUtil
 
@@ -7,7 +6,7 @@ class ProcessNode(object):
         self.pid = pid
         self.children = []
         self.parent = parent
-        self._lock = threading.Lock()
+        self.tempProperties = []
 
         if pid == 0:
             # The node with pid = 0 is a dummy node used as the root node
@@ -18,7 +17,8 @@ class ProcessNode(object):
         else:
             self.data = Process(pid)
             self.properties = []
-            self.update()
+            self.retrieveProperties()
+            self.assignProperties()
 
     def __len__(self):
         return len(self.children)
@@ -39,14 +39,10 @@ class ProcessNode(object):
     def childAtRow(self, row):
         return self.children[row]
 
-    # update() and fields() below have to be locked because
-    # update() is called from a worker thread whereas fields()
-    # is called by the main GUI thread. This is done because
-    # the update can be slow and causes the GUI to lag
-    def update(self):
-        with self._lock:
-            proc = self.data
-            self.properties = [
+    def retrieveProperties(self):
+        proc = self.data
+        try:
+            self.tempProperties = [
                 proc.name(),
                 round(proc.cpu_percent(), 2) or "",
                 round(proc.memory_percent(), 2) or "",
@@ -56,14 +52,24 @@ class ProcessNode(object):
                 proc.nice(),
                 proc.priority()
             ]
+        except FileNotFoundError:
+            self.tempProperties = None
+            raise
+
+    # update() and fields() below have to be locked because
+    # update() is called from a worker thread whereas fields()
+    # is called by the main GUI thread. This is done because
+    # the update can be slow and causes the GUI to lag
+    def assignProperties(self):
+        self.properties = self.tempProperties
+        return self.properties is not None
 
     def fields(self, colIdx):
-        with self._lock:
             return self.properties[colIdx]
 
 
 class ProcTableModelRefresher(QObject):
-    modelRefresh = pyqtSignal()
+    modelRefresh = pyqtSignal(list, list)
 
     def __init__(self, model, refreshInterval=2000, parent=None):
         super().__init__(parent)
@@ -87,65 +93,25 @@ class ProcTableModelRefresher(QObject):
         self.timer.timeout.connect(self.refresh)
         self.timer.start(self.refreshInterval)
 
-    def deleteFromTable(self, node):
-        del self.procTable[node.pid]
-        for child in node.children:
-            self.deleteFromTable(child)
-
-    def addNewProcesses(self):
-        for pid in ProcUtil.pids():
-            if pid not in self.procTable:
-                node = ProcessNode(pid)
-                self.procTable[pid] = node
-                ppid = node.data.parent_pid()
-                if ppid not in self.procTable:
-                    self.procTable[ppid] = ProcessNode(ppid)
-                self.procTable[ppid].insertChild(node)
-                node.parent = self.procTable[ppid]
-                grandParent = node.parent.parent
-                parentMIdx = self.model.createIndex(grandParent.rowOfChild(node.parent), 0, grandParent)
-                childIdx = node.parent.rowOfChild(node)
-                self.model.rowsInserted.emit(parentMIdx, childIdx, childIdx)
-
     @pyqtSlot()
     def refresh(self):
-        print("refresh() start")
-        def updateNodes(node):
+        newProcNodes = []
+        for pid in ProcUtil.pids():
+            if pid not in self.procTable:
+                self.procTable[pid] = Process(pid)
+                newProcNodes.append(pid)
+
+        pidsToRemove = []
+        for pid, node in list(self.procTable.items()):
+            if pid == 0:
+                continue
             try:
-                print("before node.update()")
-                node.update()
-                print("after node.update()")
-                for child in node.children:
-                    updateNodes(child)
-            # process no longer exists
+                node.retrieveProperties()
             except FileNotFoundError:
-                print("before fixing underlying hierarchy")
-                parent = node.parent
-                grandParent = parent.parent
-                parentMIdx = self.model.createIndex(grandParent.rowOfChild(parent), 0, grandParent)
-                childIdx = parent.rowOfChild(node)
-                parent.removeChild(node)
-                self.model.rowsRemoved.emit(parentMIdx, childIdx, childIdx)
-                self.deleteFromTable(node)
-                print("after fixing underlying hierarchy")
+                del self.procTable[node.pid]
+                pidsToRemove.append(node.pid)
 
-        self.addNewProcesses()
-
-        # don't update the dummy root node since it doesn't
-        # have a process associated with it
-        for child in self.root.children:
-            updateNodes(child)
-
-        print("before dataChanged emit")
-        # tell the view that the underlying data has been updated
-        # TODO: should this be done on the view?
-        self.model.dataChanged.emit(QModelIndex(), QModelIndex())
-
-        print("after dataChanged emit")
-
-        # TODO: unused for now
-        self.modelRefresh.emit()
-        print("refresh() end")
+        self.modelRefresh.emit(newProcNodes, pidsToRemove)
 
 
 class ProcTableModel(QAbstractItemModel):
@@ -156,16 +122,13 @@ class ProcTableModel(QAbstractItemModel):
         self.headers = ['Process Name', 'CPU %', 'Mem %', 'PID',
                         'RSS', 'User', 'Nice', 'Priority']
 
-        self.root = None
-        self.procTable = {}
+        # add a dummy root as this is not included in the treeview
+        self.root = ProcessNode(0)
+        self.procTable = {0: self.root}
         self.initializeProcTree()
 
     def initializeProcTree(self):
         print("InitializeProcTree")
-        # add a dummy root as this is not included in the treeview
-        self.root = ProcessNode(0)
-        self.procTable = {0: self.root}
-
         for pid in ProcUtil.pids():
             if pid in self.procTable:
                 node = self.procTable[pid]
@@ -177,6 +140,39 @@ class ProcTableModel(QAbstractItemModel):
                 self.procTable[ppid] = ProcessNode(ppid)
             self.procTable[ppid].insertChild(node)
             node.parent = self.procTable[ppid]
+
+    def updateHierarchy(self, newProcNodes):
+        for node in newProcNodes:
+            ppid = node.data.parent_pid
+            node.parent = self.procTable[ppid]
+            self.procTable[ppid].insertChild(node)
+
+            # notify the view the new nodes have been added to the hierarchy
+            # so that it can display them
+            parentNode = node.parent
+            grandParent = parentNode.parent
+            parentMIdx = self.createIndex(grandParent.rowOfChild(parentNode), 0, grandParent)
+            childIdx = parentNode.rowOfChild(node)
+            self.rowsInserted.emit(parentMIdx, childIdx, childIdx)
+
+    def updateNodeProperties(self, root):
+        if root.assignProperties():
+            for childNode in root.children:
+                self.updateNodeProperties(childNode)
+        else:
+            parentNode = root.parent
+            grandParent = parentNode.parent
+            parentMIdx = self.createIndex(grandParent.rowOfChild(parentNode), 0, grandParent)
+            childIdx = parentNode.rowOfChild(root)
+            parentNode.removeChild(root)
+            self.model.rowsRemoved.emit(parentMIdx, childIdx, childIdx)
+
+    @pyqtSlot(list, list)
+    def update(self, newProcNodes, pidsToRemove):
+        self.updateHierarchy(newProcNodes)
+        for child in self.root.children:
+            self.updateNodeProperties(child)
+        self.dataChanged.emit(QModelIndex(), QModelIndex())
 
     def index(self, row, col, parentMIdx):
         print("index({}, {}, parentMIdx={})".format(row, col, self.nodeFromIndex(parentMIdx).pid))
