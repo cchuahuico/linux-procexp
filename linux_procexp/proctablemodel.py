@@ -159,9 +159,10 @@ class ProcTableModel(QAbstractItemModel):
                 self.updateNodeProperties(childNode)
         else:
             childIdx = root.parent.rowOfChild(root)
+            self.beginRemoveRows(self.parentModelIndex(root), childIdx, childIdx)
             root.parent.removeChild(root)
             root.parent = None
-            self.rowsRemoved.emit(self.parentModelIndex(root), childIdx, childIdx)
+            self.endRemoveRows()
 
     @pyqtSlot(list)
     def update(self, newProcNodes):
