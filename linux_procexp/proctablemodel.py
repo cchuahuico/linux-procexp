@@ -36,7 +36,7 @@ class ProcessNode(object):
         for i, child in enumerate(self.children):
             if child == childNode:
                 return i
-        return -1
+        raise ValueError('Node({0}) does not contain child({0})'.format(self.pid))
 
     def removeChild(self, childNode):
         self.children.remove(childNode)
@@ -61,10 +61,6 @@ class ProcessNode(object):
             self.tempProperties = []
             raise
 
-    # update() and fields() below have to be locked because
-    # update() is called from a worker thread whereas fields()
-    # is called by the main GUI thread. This is done because
-    # the update can be slow and causes the GUI to lag
     def assignProperties(self):
         self.properties = self.tempProperties
         return len(self.properties) > 0
@@ -143,32 +139,29 @@ class ProcTableModel(QAbstractItemModel):
             self.procTable[ppid].insertChild(node)
             node.parent = self.procTable[ppid]
 
+    def parentModelIndex(self, node):
+        parentNode = node.parent
+        grandParent = parentNode.parent
+        return self.createIndex(grandParent.rowOfChild(parentNode), 0, grandParent)
+
     def addNodesToHierarchy(self, newProcNodes):
         for node in newProcNodes:
-            ppid = node.data.parent_pid()
-            node.parent = self.procTable[ppid]
-            self.procTable[ppid].insertChild(node)
-
-            # notify the view the new nodes have been added to the hierarchy
-            # so that it can display them
-            parentNode = node.parent
-            grandParent = parentNode.parent
-            parentMIdx = self.createIndex(grandParent.rowOfChild(parentNode), 0, grandParent)
-            childIdx = parentNode.rowOfChild(node)
-            self.rowsInserted.emit(parentMIdx, childIdx, childIdx)
+            node.parent = self.procTable[node.data.parent_pid()]
+            parentMIdx = self.parentModelIndex(node)
+            insertionRow = self.rowCount(parentMIdx)
+            self.beginInsertRows(parentMIdx, insertionRow , insertionRow)
+            node.parent.insertChild(node)
+            self.endInsertRows()
 
     def updateNodeProperties(self, root):
         if root.assignProperties():
             for childNode in root.children:
                 self.updateNodeProperties(childNode)
         else:
-            parentNode = root.parent
-            grandParent = parentNode.parent
-            parentMIdx = self.createIndex(grandParent.rowOfChild(parentNode), 0, grandParent)
-            childIdx = parentNode.rowOfChild(root)
-            parentNode.removeChild(root)
+            childIdx = root.parent.rowOfChild(root)
+            root.parent.removeChild(root)
             root.parent = None
-            self.rowsRemoved.emit(parentMIdx, childIdx, childIdx)
+            self.rowsRemoved.emit(self.parentModelIndex(root), childIdx, childIdx)
 
     @pyqtSlot(list)
     def update(self, newProcNodes):
