@@ -29,7 +29,6 @@ class ProcessNode(object):
         return len(self.children)
 
     def insertChild(self, child):
-        assert child not in self.children
         self.children.append(child)
 
     def rowOfChild(self, childNode):
@@ -161,17 +160,17 @@ class ProcTableModel(QAbstractItemModel):
             childIdx = root.parent.rowOfChild(root)
             self.beginRemoveRows(self.parentModelIndex(root), childIdx, childIdx)
             root.parent.removeChild(root)
-            root.parent = None
             self.endRemoveRows()
 
     @pyqtSlot(list)
     def update(self, newProcNodes):
+        self.layoutAboutToBeChanged.emit()
         if newProcNodes:
             self.addNodesToHierarchy(newProcNodes)
 
         for child in self.root.children:
             self.updateNodeProperties(child)
-
+        self.layoutChanged.emit()
         self.dataChanged.emit(QModelIndex(), QModelIndex())
 
     def index(self, row, col, parentMIdx):
