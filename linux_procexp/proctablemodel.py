@@ -43,6 +43,9 @@ class ProcessNode(object):
     def childAtRow(self, row):
         return self.children[row]
 
+    def descriptors(self):
+        return self.data.descriptors()
+
     def retrieveProperties(self):
         proc = self.data
         try:
