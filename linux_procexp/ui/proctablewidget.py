@@ -22,14 +22,6 @@ class ProcTableWidget(QTreeView):
         self.header().setClickable(True)
         self.header().sectionClicked.connect(self.setSortIndicator)
 
-        # ideally this should be set dynamically in setSortIndicator()
-        # i.e. its state should be based on the status indicator
-        # however, the the status indicator in the widget break when
-        # setSortingEnabled() is set to False. can't leave it to on off
-        # state either because the AbstractItemModel's sort() doesn't
-        # get
-        self.setSortingEnabled(True)
-
         # this worker thread grabs the latest process properties
         # so the GUI doesn't lag when it needs to update process data
         self.refreshThread = QThread(self)
@@ -41,11 +33,17 @@ class ProcTableWidget(QTreeView):
 
     @pyqtSlot(int)
     def setSortIndicator(self, columnIdx):
-        if self.header().isSortIndicatorShown():
+        if self.isSortingEnabled():
             # the 'no sort' state is only accessible by changing
             # the sort order of the process name column
             if columnIdx == 0 and self.prevSortOrder == Qt.DescendingOrder:
                 self.header().setSortIndicatorShown(False)
+                self.setSortingEnabled(False)
+
+                # setClickable() has to be set to True again after
+                # calling setSortingEnabled(False) otherwise, the headers
+                # cannot be clicked and the columns cannot be sorted
+                self.header().setClickable(True)
         else:
             self.header().setSortIndicatorShown(True)
             # force the sort indicator to start with ascendingorder
@@ -54,6 +52,7 @@ class ProcTableWidget(QTreeView):
             # which makes it hard to detect when it's time to set the
             # 'no sort' state
             self.header().setSortIndicator(columnIdx, Qt.AscendingOrder)
+            self.setSortingEnabled(True)
 
         self.prevSortOrder = self.header().sortIndicatorOrder()
 
