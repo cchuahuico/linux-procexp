@@ -97,8 +97,6 @@ class ProcTableModelRefresher(QObject):
     @pyqtSlot()
     def refresh(self):
         for pid, node in list(self.procTable.items()):
-            if pid == 0:
-                continue
             try:
                 node.retrieveProperties()
             except FileNotFoundError:
@@ -133,9 +131,16 @@ class ProcTableModel(QAbstractItemModel):
         # or Qt.DescendingOrder
         self.sortOrder = None
 
-        # add a dummy root as this is not included in the treeview
+        # add a dummy root node. this root node is not shown in the
+        # view (only its children) but it is needed by the view to
+        # show the hierarchy. also, it simplifies sorting of processes
         self.root = ProcessNode(0)
-        self.procTable = {0: self.root}
+
+        # this is a map of pid -> ProcessNode NOT including the dummy
+        # root node. the dummy node is not included because adding
+        # that in will require if pid == 0 checks when processing nodes
+        # e.g. when updating all nodes
+        self.procTable = {}
         self.setProcHierarchy(ProcUtil.pids())
 
     def setProcHierarchy(self, pids):
@@ -147,10 +152,14 @@ class ProcTableModel(QAbstractItemModel):
                 node = ProcessNode(pid)
                 self.procTable[pid] = node
             ppid = node.data.parent_pid()
-            if ppid not in self.procTable:
+            if ppid not in self.procTable and ppid != 0:
                 self.procTable[ppid] = ProcessNode(ppid)
-            self.procTable[ppid].insertChild(node)
-            node.parent = self.procTable[ppid]
+            if ppid == 0:
+                self.root.insertChild(node)
+                node.parent = self.root
+            else:
+                self.procTable[ppid].insertChild(node)
+                node.parent = self.procTable[ppid]
 
     def parentModelIndex(self, node):
         parentNode = node.parent
@@ -204,7 +213,6 @@ class ProcTableModel(QAbstractItemModel):
         self.layoutAboutToBeChanged.emit()
         if not self.sorted:
             for pid, node in self.procTable.items():
-                if pid == 0: continue
                 node.parent = self.root
                 node.children = []
                 if node not in self.root.children:
@@ -216,7 +224,6 @@ class ProcTableModel(QAbstractItemModel):
         self.sortOrder = order
         self.sortedColIdx = columnIdx
         self.layoutChanged.emit()
-        print("sorted")
 
     def index(self, row, col, parentMIdx):
         logging.debug("index({}, {}, parentMIdx={})".format(row, col, self.nodeFromIndex(parentMIdx).pid))
