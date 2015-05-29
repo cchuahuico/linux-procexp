@@ -136,11 +136,11 @@ class ProcTableModel(QAbstractItemModel):
         # add a dummy root as this is not included in the treeview
         self.root = ProcessNode(0)
         self.procTable = {0: self.root}
-        self.initializeProcTree()
+        self.setProcHierarchy(ProcUtil.pids())
 
-    def initializeProcTree(self):
-        logging.debug("InitializeProcTree")
-        for pid in ProcUtil.pids():
+    def setProcHierarchy(self, pids):
+        logging.debug("setProcHierarchy")
+        for pid in pids:
             if pid in self.procTable:
                 node = self.procTable[pid]
             else:
@@ -197,7 +197,7 @@ class ProcTableModel(QAbstractItemModel):
         self.sortedColIdx = -1
         self.layoutAboutToBeChanged.emit()
         self.root.children = []
-        self.initializeProcTree()
+        self.setProcHierarchy(self.procTable.keys())
         self.layoutChanged.emit()
 
     def sort(self, columnIdx, order):
