@@ -39,7 +39,7 @@ class ProcTableWidget(QTreeView):
             if columnIdx == 0 and self.prevSortOrder == Qt.DescendingOrder:
                 self.header().setSortIndicatorShown(False)
                 self.setSortingEnabled(False)
-
+                self.model.removeSort()
                 # setClickable() has to be set to True again after
                 # calling setSortingEnabled(False) otherwise, the headers
                 # cannot be clicked and the columns cannot be sorted

@@ -122,6 +122,17 @@ class ProcTableModel(QAbstractItemModel):
         self.headers = ['Process Name', 'CPU %', 'Mem %', 'PID',
                         'RSS', 'User', 'Nice', 'Priority']
 
+        # the model is in a sorted state when the widget
+        # has setSortingEnabled() set to true
+        self.sorted = False
+
+        # only set when sorted == True. count starts from 0
+        self.sortedColIdx = -1
+
+        # only set when sorted == True. Either Qt.AscendingOrder
+        # or Qt.DescendingOrder
+        self.sortOrder = None
+
         # add a dummy root as this is not included in the treeview
         self.root = ProcessNode(0)
         self.procTable = {0: self.root}
@@ -173,20 +184,37 @@ class ProcTableModel(QAbstractItemModel):
 
         for child in self.root.children:
             self.updateNodeProperties(child)
+
+        if self.sorted:
+            self.root.children.sort(key=lambda node: node.properties[self.sortedColIdx],
+                                    reverse=self.sortOrder == Qt.AscendingOrder)
         self.layoutChanged.emit()
         self.dataChanged.emit(QModelIndex(), QModelIndex())
 
+    def removeSort(self):
+        self.sorted = False
+        self.sortOrder = None
+        self.sortedColIdx = -1
+        self.layoutAboutToBeChanged.emit()
+        self.root.children = []
+        self.initializeProcTree()
+        self.layoutChanged.emit()
+
     def sort(self, columnIdx, order):
         self.layoutAboutToBeChanged.emit()
-        if columnIdx == 1:
+        if not self.sorted:
             for pid, node in self.procTable.items():
                 if pid == 0: continue
                 node.parent = self.root
                 node.children = []
                 if node not in self.root.children:
                     self.root.insertChild(node)
-            self.root.children.sort(key=lambda x: x.properties[columnIdx],
-                                    reverse=order == Qt.AscendingOrder)
+            self.sorted = True
+
+        self.root.children.sort(key=lambda x: x.properties[columnIdx],
+                                reverse=order == Qt.AscendingOrder)
+        self.sortOrder = order
+        self.sortedColIdx = columnIdx
         self.layoutChanged.emit()
         print("sorted")
 
