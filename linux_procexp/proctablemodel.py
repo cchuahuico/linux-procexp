@@ -51,8 +51,8 @@ class ProcessNode(object):
         try:
             self.tempProperties = [
                 proc.name(),
-                round(proc.cpu_percent(), 2) or "",
-                round(proc.memory_percent(), 2) or "",
+                round(proc.cpu_percent(), 2),
+                round(proc.memory_percent(), 2),
                 proc.pid(),
                 "{}M".format(proc.virtual_memory().rss // 1048576),
                 proc.owner().name,
@@ -176,6 +176,20 @@ class ProcTableModel(QAbstractItemModel):
         self.layoutChanged.emit()
         self.dataChanged.emit(QModelIndex(), QModelIndex())
 
+    def sort(self, columnIdx, order):
+        self.layoutAboutToBeChanged.emit()
+        if columnIdx == 1:
+            for pid, node in self.procTable.items():
+                if pid == 0: continue
+                node.parent = self.root
+                node.children = []
+                if node not in self.root.children:
+                    self.root.insertChild(node)
+            self.root.children.sort(key=lambda x: x.properties[columnIdx],
+                                    reverse=order == Qt.AscendingOrder)
+        self.layoutChanged.emit()
+        print("sorted")
+
     def index(self, row, col, parentMIdx):
         logging.debug("index({}, {}, parentMIdx={})".format(row, col, self.nodeFromIndex(parentMIdx).pid))
         node = self.nodeFromIndex(parentMIdx)
@@ -202,7 +216,8 @@ class ProcTableModel(QAbstractItemModel):
         if role == Qt.DisplayRole:
             logging.debug("data(mIdx={})".format(self.nodeFromIndex(mIdx).pid))
             node = self.nodeFromIndex(mIdx)
-            return node.fields(mIdx.column())
+            # show nothing for properties that are '0'
+            return node.fields(mIdx.column()) or ""
         return None
 
     def headerData(self, section, orientation, role=Qt.DisplayRole):
