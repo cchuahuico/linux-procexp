@@ -1,4 +1,5 @@
 import logging
+import re
 from PyQt4.QtCore import QAbstractItemModel, Qt, QModelIndex, QObject, \
      QTimer, pyqtSignal, pyqtSlot
 from .procutil import Process, ProcUtil
@@ -42,6 +43,10 @@ class ProcessNode(object):
 
     def childAtRow(self, row):
         return self.children[row]
+
+    def mappedLibraries(self):
+        return {mapped.name for mapped in self.data.memory_maps(resolvedev=False)
+                if re.match('.*\.so.*', mapped.name)}
 
     def descriptors(self):
         return self.data.descriptors()
