@@ -30,7 +30,7 @@ class Process(object):
     Owner = namedtuple('Owner', ['uid', 'name'])
     FileDescriptor = namedtuple('FileDescriptor', ['id', 'type', 'name'])
     MappedRegion = namedtuple('MappedRegion', ['start', 'end', 'permissions',
-                                                'offset', 'dev', 'inode', 'file_path'])
+                                                'offset', 'dev', 'inode', 'name'])
     VirtualMemory = namedtuple('VirtualMemory', ['vsize', 'rss'])
 
     def __init__(self, pid, parent=None):
@@ -169,6 +169,11 @@ class Process(object):
                         dev_name = ''
                 else:
                     dev_name = map_toks[3]
+
+                # anonymous memory maps will not have a name
+                if len(map_toks) < 6:
+                    map_toks.append('')
+
                 maps.append(Process.MappedRegion(start, end, map_toks[1], map_toks[2],
                                                  dev_name, map_toks[4], map_toks[5]))
         return maps
