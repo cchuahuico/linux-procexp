@@ -1,6 +1,7 @@
 from PyQt4.QtGui import QAction, QMainWindow, QSplitter, QTableWidget, QTableWidgetItem, QColor
 from PyQt4.QtCore import Qt, pyqtSlot, QModelIndex, QEvent
 from .proctablewidget import ProcTableWidget
+from ..proctablemodel import ProcTableModel
 from .findhandledialog import FindHandleDialog
 
 class ProcExpWindow(QMainWindow):
@@ -21,9 +22,10 @@ class ProcExpWindow(QMainWindow):
 
     def initUI(self):
         self.initMenuBar()
-        self.setGeometry(300, 300, 1050, 650)
+        self.setGeometry(300, 300, 1280, 700)
         self.setWindowTitle('Linux Process Explorer')
-        self.procTable = ProcTableWidget()
+        self.model = ProcTableModel(self)
+        self.procTable = ProcTableWidget(self.model)
         self.procTable.clicked.connect(self.showDescriptors)
         self.handlesTable = QTableWidget()
         self.handlesTable.setColumnCount(2)

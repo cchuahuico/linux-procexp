@@ -3,13 +3,13 @@ from PyQt4.QtCore import QThread, pyqtSlot, Qt
 from ..proctablemodel import ProcTableModel, ProcTableModelRefresher
 
 class ProcTableWidget(QTreeView):
-    def __init__(self, parent=None):
+    def __init__(self, model, parent=None):
         super().__init__(parent)
         self.setSelectionBehavior(QTreeView.SelectRows)
 
         # setting uniform row heights allows optimization of the view
         self.setUniformRowHeights(True)
-        self.model = ProcTableModel(self)
+        self.model = model
         self.setModel(self.model)
         self.expandAll()
 
