@@ -1,11 +1,13 @@
 from PyQt4.QtGui import QAction, QMainWindow, QSplitter, QTableWidget, QTableWidgetItem, QColor
-from PyQt4.QtCore import Qt, pyqtSlot, QModelIndex
+from PyQt4.QtCore import Qt, pyqtSlot, QModelIndex, QEvent
 from .proctablewidget import ProcTableWidget
+from .findhandledialog import FindHandleDialog
 
 class ProcExpWindow(QMainWindow):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.initUI()
+        self.findDialog = None
 
     def initMenuBar(self):
         exitItem = QAction('Exit', self)
@@ -38,6 +40,18 @@ class ProcExpWindow(QMainWindow):
         mainSplitter.addWidget(self.procTable)
         mainSplitter.addWidget(self.handlesTable)
         self.setCentralWidget(mainSplitter)
+
+    def keyPressEvent(self, event):
+        if event.type() == QEvent.KeyPress:
+            modifiers = event.modifiers()
+            if event.key() == Qt.Key_F and modifiers & Qt.ControlModifier:
+                if not self.findDialog:
+                    self.findDialog = FindHandleDialog(self)
+                    self.findDialog.show()
+                self.findDialog.activateWindow()
+                return
+        super().keyPressEvent(event)
+
 
     @pyqtSlot(QModelIndex)
     def showDescriptors(self, processMIdx):
