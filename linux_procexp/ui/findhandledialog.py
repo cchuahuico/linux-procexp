@@ -6,3 +6,6 @@ class FindHandleDialog(QDialog):
         super().__init__(parent)
         self.setModal(False)
         self.setAttribute(Qt.WA_DeleteOnClose)
+        self.setWindowFlags(Qt.Window | Qt.WindowSystemMenuHint
+                            | Qt.WindowMinimizeButtonHint | Qt.WindowCloseButtonHint
+                            | Qt.WindowMaximizeButtonHint)
