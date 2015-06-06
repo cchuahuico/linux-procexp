@@ -1,6 +1,6 @@
 from PyQt4.QtGui import QTreeView
 from PyQt4.QtCore import QThread, pyqtSlot, Qt
-from ..proctablemodel import ProcTableModel, ProcTableModelRefresher
+from ..proctablemodel import ProcTableModelRefresher
 
 class ProcTableWidget(QTreeView):
     def __init__(self, model, parent=None):
