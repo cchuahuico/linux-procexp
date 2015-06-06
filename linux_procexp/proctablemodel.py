@@ -230,6 +230,14 @@ class ProcTableModel(QAbstractItemModel):
         self.sortedColIdx = columnIdx
         self.layoutChanged.emit()
 
+    def getProcDescriptors(self, procMIdx):
+        procNode = procMIdx.internalPointer()
+        return procNode.descriptors()
+
+    def getProcLibraries(self, procMidx):
+        procNode = procMidx.internalPointer()
+        return procNode.mappedLibraries()
+
     def index(self, row, col, parentMIdx):
         logging.debug("index({}, {}, parentMIdx={})".format(row, col, self.nodeFromIndex(parentMIdx).pid))
         node = self.nodeFromIndex(parentMIdx)

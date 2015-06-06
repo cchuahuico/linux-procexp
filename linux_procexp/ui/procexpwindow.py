@@ -68,9 +68,8 @@ class ProcExpWindow(QMainWindow):
         try:
             self.handlesTable.setRowCount(0)
             self.handlesTable.clearContents()
-            procNode = processMIdx.internalPointer()
-            descriptors = procNode.descriptors()
-            libs = procNode.mappedLibraries()
+            descriptors = self.model.getProcDescriptors(processMIdx)
+            libs = self.model.getProcLibraries(processMIdx)
             self.handlesTable.setRowCount(len(descriptors) + len(libs))
         except PermissionError:
             self.handlesTable.setRowCount(1)
