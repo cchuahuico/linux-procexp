@@ -54,7 +54,7 @@ class ProcExpWindow(QMainWindow):
             modifiers = event.modifiers()
             if event.key() == Qt.Key_F and modifiers & Qt.ControlModifier:
                 if self.findDialog is None:
-                    self.findDialog = FindHandleDialog(self)
+                    self.findDialog = FindHandleDialog(self.model, self)
                     self.findDialog.finished.connect(self.removeFindDialog)
                     self.findDialog.show()
                 else:

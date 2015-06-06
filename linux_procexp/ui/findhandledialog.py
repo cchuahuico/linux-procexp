@@ -1,9 +1,11 @@
-from PyQt4.QtGui import QDialog, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, QPushButton, QTableWidget
-from PyQt4.QtCore import Qt
+from PyQt4.QtGui import QDialog, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, QPushButton, \
+     QTableWidget, QTableWidgetItem
+from PyQt4.QtCore import Qt, pyqtSlot
 
 class FindHandleDialog(QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, model, parent=None):
         super().__init__(parent)
+        self.model = model
         self.setModal(False)
         self.setAttribute(Qt.WA_DeleteOnClose)
         # QDialogs at least in GNOME do not have a close button by default
@@ -15,19 +17,42 @@ class FindHandleDialog(QDialog):
                       (parent.height() - self.height()) / 2 + parent.y())
 
         lblSearch = QLabel('Descriptor or Lib substring:')
-        txtSearch = QLineEdit()
+        self.txtSearch = QLineEdit()
         btnSearch = QPushButton('Search')
+        btnSearch.clicked.connect(self.onBtnSearchClicked)
         btnCancel = QPushButton('Cancel')
         searchLayout = QHBoxLayout()
         searchLayout.addWidget(lblSearch)
-        searchLayout.addWidget(txtSearch)
+        searchLayout.addWidget(self.txtSearch)
         searchLayout.addWidget(btnSearch)
         searchLayout.addWidget(btnCancel)
-        tblResults = QTableWidget(0, 4)
-        tblResults.setHorizontalHeaderLabels(('Process', 'PID', 'Type', 'Name'))
-        tblResults.horizontalHeader().setStretchLastSection(True)
+        self.tblResults = QTableWidget(0, 4)
+        self.tblResults.setHorizontalHeaderLabels(('Process', 'PID', 'Type', 'Name'))
+        self.tblResults.horizontalHeader().setStretchLastSection(True)
+        self.tblResults.verticalHeader().setVisible(False)
+        self.tblResults.setShowGrid(False)
+        self.tblResults.setSelectionBehavior(QTableWidget.SelectRows)
         mainLayout = QVBoxLayout()
         mainLayout.addLayout(searchLayout)
-        mainLayout.addWidget(tblResults)
+        mainLayout.addWidget(self.tblResults)
         self.setLayout(mainLayout)
+
+    @pyqtSlot(bool)
+    def onBtnSearchClicked(self, checked=False):
+        handleSubstr = self.txtSearch.text()
+        if handleSubstr:
+            results = self.model.findHandlesBySubstr(handleSubstr)
+            self.tblResults.setRowCount(len(results))
+            for row, res in enumerate(results):
+                item = QTableWidgetItem(res.procName)
+                self.tblResults.setItem(row, 0, item)
+                item = QTableWidgetItem(str(res.pid))
+                self.tblResults.setItem(row, 1, item)
+                item = QTableWidgetItem(res.type)
+                self.tblResults.setItem(row, 2, item)
+                item = QTableWidgetItem(res.name)
+                self.tblResults.setItem(row, 3, item)
+
+
+
 

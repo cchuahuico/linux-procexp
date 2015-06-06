@@ -1,5 +1,6 @@
 import logging
 import re
+from collections import namedtuple
 from PyQt4.QtCore import QAbstractItemModel, Qt, QModelIndex, QObject, \
      QTimer, pyqtSignal, pyqtSlot
 from .procutil import Process, ProcUtil
@@ -118,6 +119,8 @@ class ProcTableModelRefresher(QObject):
 
 
 class ProcTableModel(QAbstractItemModel):
+    FindHandleResult = namedtuple('FindHandleResult', ['procName', 'pid', 'type', 'name'])
+
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -237,6 +240,24 @@ class ProcTableModel(QAbstractItemModel):
     def getProcLibraries(self, procMidx):
         procNode = procMidx.internalPointer()
         return procNode.mappedLibraries()
+
+    def findHandlesBySubstr(self, substr):
+        res = []
+        for pid, procNode in self.procTable.items():
+            try:
+                for desc in procNode.descriptors():
+                    if substr in desc.name:
+                        res.append(
+                            ProcTableModel.FindHandleResult(procNode.properties[0],
+                                                            pid, desc.type, desc.name))
+                for libName in procNode.mappedLibraries():
+                    if substr in libName:
+                        res.append(
+                            ProcTableModel.FindHandleResult(procNode.properties[0],
+                                                            pid, 'Shared Library', libName))
+            except (PermissionError, FileNotFoundError):
+                pass
+        return res
 
     def index(self, row, col, parentMIdx):
         logging.debug("index({}, {}, parentMIdx={})".format(row, col, self.nodeFromIndex(parentMIdx).pid))
