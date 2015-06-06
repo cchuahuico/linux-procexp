@@ -3,7 +3,7 @@ from PyQt4.QtGui import QDialog, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, QP
 from PyQt4.QtCore import Qt, pyqtSlot
 
 class FindHandleDialog(QDialog):
-    def __init__(self, model, parent=None):
+    def __init__(self, model, parent):
         super().__init__(parent)
         self.model = model
         self.setModal(False)
@@ -11,16 +11,15 @@ class FindHandleDialog(QDialog):
         # QDialogs at least in GNOME do not have a close button by default
         self.setWindowFlags(Qt.Window | Qt.WindowSystemMenuHint | Qt.WindowCloseButtonHint)
         self.setWindowTitle('Linux Process Explorer Search')
-        if parent:
-            self.setGeometry(0, 0, 900, 500)
-            self.move((parent.width() - self.width()) / 2 + parent.x(),
-                      (parent.height() - self.height()) / 2 + parent.y())
+        self.setGeometry(0, 0, 900, 500)
+        self.move((parent.width() - self.width()) / 2 + parent.x(),
+                  (parent.height() - self.height()) / 2 + parent.y())
 
         lblSearch = QLabel('Descriptor or Lib substring:')
         self.txtSearch = QLineEdit()
-        btnSearch = QPushButton('Search')
+        btnSearch = QPushButton('&Search')
         btnSearch.clicked.connect(self.onBtnSearchClicked)
-        btnCancel = QPushButton('Cancel')
+        btnCancel = QPushButton('&Cancel')
         searchLayout = QHBoxLayout()
         searchLayout.addWidget(lblSearch)
         searchLayout.addWidget(self.txtSearch)
@@ -44,15 +43,14 @@ class FindHandleDialog(QDialog):
             results = self.model.findHandlesBySubstr(handleSubstr)
             self.tblResults.setRowCount(len(results))
             for row, res in enumerate(results):
-                item = QTableWidgetItem(res.procName)
-                self.tblResults.setItem(row, 0, item)
-                item = QTableWidgetItem(str(res.pid))
-                self.tblResults.setItem(row, 1, item)
-                item = QTableWidgetItem(res.type)
-                self.tblResults.setItem(row, 2, item)
-                item = QTableWidgetItem(res.name)
-                self.tblResults.setItem(row, 3, item)
+                for col, prop in enumerate(res):
+                    self.tblResults.setItem(row, col, QTableWidgetItem(str(prop)))
 
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Enter and self.txtSearch.hasFocus():
+            self.onBtnSearchClicked()
+            return
+        super().keyPressEvent(event)
 
 
 

@@ -50,16 +50,15 @@ class ProcExpWindow(QMainWindow):
         self.findDialog = None
 
     def keyPressEvent(self, event):
-        if event.type() == QEvent.KeyPress:
-            modifiers = event.modifiers()
-            if event.key() == Qt.Key_F and modifiers & Qt.ControlModifier:
-                if self.findDialog is None:
-                    self.findDialog = FindHandleDialog(self.model, self)
-                    self.findDialog.finished.connect(self.removeFindDialog)
-                    self.findDialog.show()
-                else:
-                    self.findDialog.activateWindow()
-                return
+        modifiers = event.modifiers()
+        if event.key() == Qt.Key_F and modifiers & Qt.ControlModifier:
+            if self.findDialog is None:
+                self.findDialog = FindHandleDialog(self.model, self)
+                self.findDialog.finished.connect(self.removeFindDialog)
+                self.findDialog.show()
+            else:
+                self.findDialog.activateWindow()
+            return
         super().keyPressEvent(event)
 
 
