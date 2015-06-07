@@ -44,7 +44,9 @@ class FindHandleDialog(QDialog):
             self.tblResults.setRowCount(len(results))
             for row, res in enumerate(results):
                 for col, prop in enumerate(res):
-                    self.tblResults.setItem(row, col, QTableWidgetItem(str(prop)))
+                    item = QTableWidgetItem(str(prop))
+                    item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
+                    self.tblResults.setItem(row, col, item)
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Enter and self.txtSearch.hasFocus():
