@@ -58,9 +58,8 @@ class ProcExpWindow(QMainWindow):
                 self.findDialog.show()
             else:
                 self.findDialog.activateWindow()
-            return
-        super().keyPressEvent(event)
-
+        else:
+            super().keyPressEvent(event)
 
     @pyqtSlot(QModelIndex)
     def showDescriptors(self, processMIdx):

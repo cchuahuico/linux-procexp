@@ -31,6 +31,7 @@ class FindHandleDialog(QDialog):
         self.tblResults.verticalHeader().setVisible(False)
         self.tblResults.setShowGrid(False)
         self.tblResults.setSelectionBehavior(QTableWidget.SelectRows)
+        self.tblResults.verticalHeader().setDefaultSectionSize(24)
         mainLayout = QVBoxLayout()
         mainLayout.addLayout(searchLayout)
         mainLayout.addWidget(self.tblResults)
